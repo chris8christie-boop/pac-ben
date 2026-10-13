@@ -1,9 +1,9 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import { damageBoss } from '../lib/bosses.ts';
-import { createGame, drainEvents, hitPlayer, loadLevel, NO_INPUT, robotsLeft, startRun, STEP, update } from '../lib/game.ts';
+import { createGame, drainEvents, hitPlayer, loadLevel, NO_INPUT, robotsOut, startRun, STEP, update } from '../lib/game.ts';
 import { BOSS_ORDER, LEVEL_COUNT, levelSpec } from '../lib/levels.ts';
-import { DOWN, DX, DY, LEFT, RIGHT, UP, canGo, distanceMap } from '../lib/maze.ts';
+import { DOWN, DX, DY, LEFT, RIGHT, UP, atCentre, canGo, tileIndex } from '../lib/maze.ts';
 import type { Controls, Game } from '../lib/types.ts';
 
 const run = (g: Game, seconds: number, c: Partial<Controls> = {}) => {
@@ -19,26 +19,49 @@ function playing(level = 1, seed = 7): Game {
   return g;
 }
 
-/** Heads for the nearest robot (or the boss) and fires. */
+/**
+ * The test bot: heads for the nearest dot (or the boss) and fires all the time.
+ * It plans from the tile centre it is about to reach.
+ */
 function hunt(g: Game): Controls {
   const p = g.player;
-  const targets = g.boss && !g.boss.dead ? [{ x: Math.round(g.boss.x), y: Math.round(g.boss.y) }] : g.robots.filter((r) => r.alive).map((r) => ({ x: Math.round(r.x), y: Math.round(r.y) }));
-  let dir = -1;
-  if (targets.length) {
-    const map = distanceMap(g.maze, targets);
-    let best = Infinity;
-    const px = Math.round(p.x);
-    const py = Math.round(p.y);
+  const m = g.maze;
+  const control = (dir: number): Controls => ({ ...NO_INPUT, dir, fire: true, start: g.state === 'clear' });
+  if (!atCentre(p) && p.dir < 0) return control(LEFT);
+  // Just stepped off the pad it arrived on: finish the step first (the pad works again from the next tile).
+  if (!atCentre(p) && p.portalLock >= 0) return control(p.dir);
+  const boss = g.boss && !g.boss.dead ? g.boss : null;
+  const isTarget = (i: number) => (boss ? Math.hypot((i % 28) - boss.x, Math.floor(i / 28) - boss.y) < 2.5 : g.dots[i] > 0);
+  // Plan from the tile centre Ben is about to reach.
+  let startTile = tileIndex(p.x, p.y);
+  if (!atCentre(p)) {
+    const ahead = (v: number, d: number) => (d > 0 ? Math.floor(v + 1e-6) + 1 : Math.ceil(v - 1e-6) - 1);
+    startTile = DX[p.dir] ? tileIndex(ahead(p.x, DX[p.dir]), p.y) : tileIndex(p.x, ahead(p.y, DY[p.dir]));
+    // About to step onto a pad: keep going and plan again on the other side.
+    if (m.portalLink[startTile] >= 0) return control(p.dir);
+    if (isTarget(startTile)) return control(p.dir);
+  }
+  const first = new Int8Array(m.tiles.length).fill(-1);
+  const seen = new Uint8Array(m.tiles.length);
+  seen[startTile] = 1;
+  const queue = [startTile];
+  for (let q = 0; q < queue.length; q++) {
+    const u = queue[q];
+    if (u !== startTile && isTarget(u)) return control(first[u]);
+    const ux = u % 28;
+    const uy = (u - ux) / 28;
     for (let d = 0; d < 4; d++) {
-      if (!canGo(g.maze, px, py, d)) continue;
-      const v = map[(py + DY[d]) * 28 + ((px + DX[d] + 28) % 28)];
-      if (v >= 0 && v < best) {
-        best = v;
-        dir = d;
-      }
+      if (!canGo(m, ux, uy, d)) continue;
+      let v = tileIndex(ux + DX[d], uy + DY[d]);
+      // Stepping onto a teleport pad lands you on its partner.
+      if (m.portalLink[v] >= 0) v = m.portalLink[v];
+      if (seen[v]) continue;
+      seen[v] = 1;
+      first[v] = u === startTile ? d : first[u];
+      queue.push(v);
     }
   }
-  return { ...NO_INPUT, dir, fire: true, start: g.state === 'clear' };
+  return control(-1);
 }
 
 test('levels get harder, and every fifth is a boss', () => {
@@ -49,7 +72,8 @@ test('levels get harder, and every fifth is a boss', () => {
       const prev = levelSpec(L - 1);
       assert.ok(spec.robotSpeed > prev.robotSpeed);
       assert.ok(spec.overdrive <= prev.overdrive);
-      if (!spec.boss && !prev.boss) assert.ok(spec.quota >= prev.quota);
+      assert.ok(spec.maxActive >= prev.maxActive);
+      assert.ok(spec.respawn <= prev.respawn);
     }
   }
   assert.equal(new Set(BOSS_ORDER).size, 6);
@@ -128,11 +152,10 @@ test('shooting a robot destroys it and scores', () => {
     g.player.facing = (d + 2) % 4;
     break;
   }
-  const before = robotsLeft(g);
   const score = g.score;
   run(g, 0.4, { fire: true });
   assert.equal(r.alive, false);
-  assert.equal(robotsLeft(g), before - 1);
+  assert.equal(g.kills, 1);
   assert.ok(g.score >= score + 100);
 });
 
@@ -168,7 +191,40 @@ test('touching a robot costs a life, then the robots go back to the factory', ()
   run(g, 2.1);
   assert.equal(g.state, 'intro');
   assert.equal(g.robots.length, 0);
-  assert.equal(robotsLeft(g), levelSpec(1).quota);
+  assert.ok(g.queue.length >= out + 3, 'they wait in the factory');
+  run(g, g.introLength + 3);
+  assert.ok(robotsOut(g) > 0, 'and come out again');
+});
+
+test('a level is cleared by eating every dot, not by shooting robots', () => {
+  const g = playing();
+  g.player.invuln = 99;
+  run(g, 3);
+  // Destroy everything out on the maze: the level carries on and the factory rebuilds them.
+  for (const r of g.robots) r.alive = false;
+  g.queue = g.queue.slice(0, 3);
+  run(g, levelSpec(1).respawn + levelSpec(1).spawnEvery * 2);
+  assert.equal(g.state, 'play');
+  assert.ok(robotsOut(g) > 0, 'robots came back');
+  // Leave one dot, right where Ben is going.
+  const p = g.player;
+  const x = Math.round(p.x);
+  const y = Math.round(p.y);
+  g.dots.fill(0);
+  for (const d of [LEFT, RIGHT, UP, DOWN]) {
+    if (!canGo(g.maze, x, y, d)) continue;
+    g.dots[(y + DY[d]) * 28 + x + DX[d]] = 1;
+    g.dotsLeft = 1;
+    for (const r of g.robots) r.alive = false;
+    g.robots = [];
+    g.spawnT = 99;
+    run(g, 0.4, { dir: d });
+    break;
+  }
+  assert.equal(g.dotsLeft, 0);
+  assert.equal(g.state, 'clear');
+  run(g, 4);
+  assert.equal(g.level, 2);
 });
 
 test('a shield absorbs one hit', () => {
@@ -217,7 +273,7 @@ test('a careful bot can clear every level, bosses included, without errors', () 
   startRun(g, 0);
   const cleared: number[] = [];
   let level = 1;
-  for (let t = 0; t < 4000 && g.state !== 'victory'; t += STEP) {
+  for (let t = 0; t < 8000 && g.state !== 'victory'; t += STEP) {
     g.player.invuln = 1;
     update(g, STEP, hunt(g));
     drainEvents(g);

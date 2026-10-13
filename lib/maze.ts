@@ -556,6 +556,8 @@ export function atCentre(m: Mover): boolean {
 /** Moves up to `dist` tiles. Returns true if the mover went through a teleport pad. */
 export function advance(maze: Maze, m: Mover, dist: number, decide: (m: Mover) => number): boolean {
   let teleported = false;
+  // The pad you arrived on stays quiet only while you stand on it. Step off at all and it works again.
+  if (m.portalLock >= 0 && !(atCentre(m) && tileIndex(m.x, m.y) === m.portalLock)) m.portalLock = -1;
   for (let guard = 0; dist > EPS && guard < 16; guard++) {
     if (atCentre(m)) {
       const here = tileIndex(m.x, m.y);

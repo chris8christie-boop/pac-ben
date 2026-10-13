@@ -214,6 +214,11 @@ export function killRobot(g: Game, r: Robot, how: 'shot' | 'eaten' | 'boss'): vo
   g.shake = Math.max(g.shake, 0.12);
   emit(g, how === 'eaten' ? 'eat' : 'kill', r.x, r.y);
   if (how === 'boss') return;
+  if (!r.minion && r.kind !== 'mini') {
+    g.kills++;
+    // The factory takes a while to rebuild it.
+    if (!g.boss) g.spawnT = Math.max(g.spawnT, g.spec.respawn);
+  }
 
   if (how === 'eaten') {
     const points = 200 * 2 ** Math.min(g.chain, 3);

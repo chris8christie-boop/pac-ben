@@ -85,6 +85,8 @@ export function createGame(save: SaveData, seed = Date.now()): Game {
     player: makePlayer(maze.playerStart.x, maze.playerStart.y),
     robots: [],
     queue: [],
+    planned: 0,
+    kills: 0,
     spawnT: 0,
     exitToggle: 0,
     bossDropT: 12,
@@ -140,14 +142,20 @@ export function startRun(g: Game, sector: number): void {
   loadLevel(g, firstLevelOf(clamp(sector, 0, g.unlocked)));
 }
 
-function buildQueue(g: Game): RobotKind[] {
+/** The first robots out are the classic four, with any new kind brought in early; then the level's mix. */
+function nextKind(g: Game): RobotKind {
   const spec = g.spec;
-  if (spec.quota === 0) return [];
   const available = new Set(spec.mix.map(([k]) => k));
-  const queue: RobotKind[] = (['chaser', 'ambusher', 'flanker', 'wanderer'] as RobotKind[]).filter((k) => available.has(k));
-  if (spec.newKind) queue.splice(1, 0, spec.newKind, spec.newKind);
-  while (queue.length < spec.quota) queue.push(pickWeighted(g.rng, spec.mix));
-  return queue.slice(0, Math.max(spec.quota, queue.length));
+  const opening: RobotKind[] = (['chaser', 'ambusher', 'flanker', 'wanderer'] as RobotKind[]).filter((k) => available.has(k));
+  if (spec.newKind) opening.splice(1, 0, spec.newKind, spec.newKind);
+  const kind = g.planned < opening.length ? opening[g.planned] : pickWeighted(g.rng, spec.mix);
+  g.planned++;
+  return kind;
+}
+
+function refillQueue(g: Game): void {
+  if (g.boss) return;
+  while (g.queue.length < 3) g.queue.push(nextKind(g));
 }
 
 export function loadLevel(g: Game, level: number): void {
@@ -165,8 +173,11 @@ export function loadLevel(g: Game, level: number): void {
   g.lasers = [];
   g.particles = [];
   g.popups = [];
-  g.queue = buildQueue(g);
   g.boss = g.spec.boss ? createBoss(g) : null;
+  g.queue = [];
+  g.planned = 0;
+  g.kills = 0;
+  refillQueue(g);
   g.modeIndex = 0;
   g.modeT = 0;
   g.scatter = true;
@@ -326,7 +337,9 @@ function updateDistances(g: Game): void {
 function updatePlayer(g: Game, dt: number, c: Controls): void {
   const p = g.player;
   const m = g.maze;
-  if (c.dir >= 0) p.desired = c.dir;
+  // Ben moves only while a direction is held. Let go and he finishes the step
+  // he's on (so he stays lined up with the corridors) and stops.
+  p.desired = c.dir;
   if (p.desired >= 0) {
     if (p.dir >= 0 && p.desired === opposite(p.dir)) p.dir = p.desired;
     else if (p.dir < 0 && !atCentre(p)) {
@@ -337,7 +350,8 @@ function updatePlayer(g: Game, dt: number, c: Controls): void {
   }
   const speed = g.spec.playerSpeed * (p.overdrive > 0 ? 1.1 : 1);
   const decide = (mv: Mover) => {
-    if (p.desired >= 0 && canGo(m, mv.x, mv.y, p.desired)) return p.desired;
+    if (p.desired < 0) return NONE;
+    if (canGo(m, mv.x, mv.y, p.desired)) return p.desired;
     if (mv.dir >= 0 && canGo(m, mv.x, mv.y, mv.dir)) return mv.dir;
     return NONE;
   };
@@ -372,7 +386,7 @@ function updatePlayer(g: Game, dt: number, c: Controls): void {
         g.pickups.push({ x: m.bonus.x, y: m.bonus.y, kind: 'bonus', t: 0, life: 9.5, points: sector.bonusPoints });
         g.bonusSpawned++;
       }
-      if (g.dotsLeft === 0) {
+      if (g.dotsLeft === 0 && g.boss) {
         popup(g, p.x, p.y - 1, 'CLEAN SWEEP!', '#7dff8a', 0.8);
         emit(g, 'sweep');
       }
@@ -605,6 +619,7 @@ function spawner(g: Game, dt: number): void {
   if (dist(p.x, p.y, exit.x, exit.y) < 2.5 && g.spawnT > -2.5) return;
   g.exitToggle++;
   const kind = g.queue.shift()!;
+  refillQueue(g);
   makeRobot(g, kind, exit.x, exit.y, g.rng() < 0.5 ? LEFT : RIGHT);
   g.spawnT = active < 2 ? 1.1 : g.spec.spawnEvery;
   emit(g, 'spawn', exit.x, exit.y);
@@ -756,19 +771,24 @@ function afterDeath(g: Game): void {
   emit(g, 'respawn');
 }
 
+/** As in Pac-Man, a level is cleared by eating every dot. A boss level is cleared by destroying the boss. */
 function checkClear(g: Game): void {
-  if (g.boss ? g.boss.dead : g.queue.length === 0 && g.robots.length === 0) clearLevel(g);
+  if (g.boss ? g.boss.dead : g.dotsLeft <= 0) clearLevel(g);
 }
 
 function clearLevel(g: Game): void {
   g.state = 'clear';
   g.stateT = 0;
-  const par = g.boss ? 120 : 45 + g.spec.quota * 5;
+  // The robots still out vanish, as Pac-Man's ghosts do.
+  for (const r of g.robots) if (r.alive) killRobot(g, r, 'boss');
+  g.robots = [];
+  const par = g.boss ? 120 : 30 + g.maze.dotTotal * 0.35;
   const tally = [];
+  if (!g.boss) tally.push({ label: `ROBOTS DESTROYED: ${g.kills}`, value: 0 });
   const time = Math.max(0, Math.round(par - g.levelT)) * 20;
   if (time > 0) tally.push({ label: 'TIME BONUS', value: time });
   if (g.levelHits === 0) tally.push({ label: 'NO DAMAGE', value: g.boss ? 5000 : 2500 });
-  if (g.dotsLeft === 0) tally.push({ label: 'CLEAN SWEEP', value: 3000 });
+  if (g.boss && g.dotsLeft === 0) tally.push({ label: 'CLEAN SWEEP', value: 3000 });
   if (g.boss) tally.push({ label: BOSS_SPECS[g.boss.kind].name + ' DESTROYED', value: 0 });
   for (const t of tally) if (t.value) addScore(g, t.value);
   g.tally = tally;
@@ -812,8 +832,8 @@ export function waitingRobots(g: Game): RobotKind[] {
   return g.queue.slice(0, 3);
 }
 
-export function robotsLeft(g: Game): number {
-  let n = g.queue.length;
+export function robotsOut(g: Game): number {
+  let n = 0;
   for (const r of g.robots) if (r.alive && !r.minion) n++;
   return n;
 }

@@ -108,7 +108,7 @@ export function startPacBen(host: HTMLElement, options: PacBenOptions = {}): () 
 
   let layout: Layout = computeLayout(1, 1, 1, coarse);
   const input = createInput(canvas, () => layout, () => sound.unlock());
-  const view: View = { ctx, layout, font, stick: input.stick, fireHeld: false, muted: saved.muted, cache: null };
+  const view: View = { ctx, layout, font, focused: document.hasFocus(), stick: input.stick, fireHeld: false, muted: saved.muted, cache: null };
 
   function resize(): void {
     // The canvas's own box, so padding on the host (safe areas) is respected.
@@ -208,6 +208,7 @@ export function startPacBen(host: HTMLElement, options: PacBenOptions = {}): () 
     sound.music(musicFor(g));
 
     view.fireHeld = input.fireHeld();
+    view.focused = document.hasFocus();
     view.muted = sound.isMuted();
     render(view, g);
 
@@ -220,13 +221,30 @@ export function startPacBen(host: HTMLElement, options: PacBenOptions = {}): () 
   }
   raf = requestAnimationFrame(frame);
 
+  function save(): void {
+    lastSaved = { hi: g.hiScore, unlocked: g.unlocked, muted: sound.isMuted() };
+    store({ hiScore: g.hiScore, unlocked: g.unlocked, muted: sound.isMuted() });
+  }
   function onVisibility(): void {
     if (document.hidden) {
       if (g.state === 'play' || g.state === 'intro') g.paused = true;
       sound.music(null);
+      save();
     }
   }
+  // Clicking outside the game (or into another frame) takes the keyboard away: pause until it's back.
+  function onBlur(): void {
+    view.focused = false;
+    if (!layout.touch && (g.state === 'play' || g.state === 'intro')) g.paused = true;
+    save();
+  }
+  function onFocus(): void {
+    view.focused = true;
+  }
   document.addEventListener('visibilitychange', onVisibility);
+  window.addEventListener('blur', onBlur);
+  window.addEventListener('focus', onFocus);
+  window.addEventListener('pagehide', save);
   canvas.focus({ preventScroll: true });
 
   return () => {
@@ -235,6 +253,9 @@ export function startPacBen(host: HTMLElement, options: PacBenOptions = {}): () 
     ro?.disconnect();
     window.removeEventListener('resize', resize);
     document.removeEventListener('visibilitychange', onVisibility);
+    window.removeEventListener('blur', onBlur);
+    window.removeEventListener('focus', onFocus);
+    window.removeEventListener('pagehide', save);
     store({ hiScore: g.hiScore, unlocked: g.unlocked, muted: sound.isMuted() });
     input.dispose();
     sound.dispose();

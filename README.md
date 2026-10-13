@@ -6,14 +6,14 @@ A top-down maze shooter in the spirit of Pac-Man. Ben runs the corridors, eats t
 
 | | Keyboard | Phone or tablet | Gamepad |
 |---|---|---|---|
-| Move | Arrows or WASD | Drag or swipe with your left thumb | D-pad or left stick |
+| Move (hold) | Arrow keys (WASD also works) | Drag with your left thumb | D-pad or left stick |
 | Fire | Space (hold for auto-fire) | Hold FIRE with your right thumb | A or right trigger |
 | Pause | P or Esc | Pause button | Start |
 | Sound | M | Speaker button | |
 
-As in Pac-Man, Ben keeps moving until he hits a wall, and a turn you press early is taken at the next opening. He shoots the way he's facing.
+Ben moves while you hold a direction. Let go and he finishes the step he's on and stops, so you can stand and shoot. A turn you press early is taken at the next opening. He shoots the way he's facing. When the game sits inside another page, click it once so it gets the keyboard; it pauses if you click away.
 
-- **Clear a level** by destroying every robot. The count is at the bottom of the screen.
+- **Clear a level** by eating every dot, as in Pac-Man. The count is at the bottom of the screen, and the last dozen glow so you can find them. Robots keep coming: the factory rebuilds each one you destroy after a few seconds. On boss levels, destroy the boss instead.
 - **Power cores** (the big pulsing dots in the corners) put Ben into overdrive. The robots turn blue and run, you can ram them for 200, 400, 800 and then 1600 points, and you fire twice as fast. On boss levels they also double your damage.
 - **Combos**: destroy robots in quick succession to multiply their points, up to ×8.
 - **Drops**: destroyed robots sometimes leave a power-up. R is rapid fire, P is piercing shots, S is seeker shots that follow the corridors to the nearest robot, the shield soaks up one hit, E is an EMP that freezes every robot, and 1UP is an extra life. Bonus items appear below the factory after 70 and 170 dots.

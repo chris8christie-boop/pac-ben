@@ -107,7 +107,15 @@ export function createInput(canvas: HTMLCanvasElement, layout: () => Layout, onG
     const p = point(e);
     const L = layout();
     if (e.pointerType === 'touch' || e.pointerType === 'pen') touched = true;
-    e.preventDefault();
+    // A mouse click must keep its default: that is what gives the page (and an
+    // embedding frame) keyboard focus. Touches are cancelled so they don't scroll or zoom.
+    if (e.pointerType !== 'mouse') e.preventDefault();
+    try {
+      canvas.focus({ preventScroll: true });
+      window.focus();
+    } catch {
+      // Focus is a nicety; clicks still work without it.
+    }
     try {
       canvas.setPointerCapture(e.pointerId);
     } catch {

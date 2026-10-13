@@ -7,7 +7,7 @@ import { BOSS_SPECS, LEVEL_COUNT, ROBOT_SPECS, SECTORS, levelSpec } from './leve
 import type { RobotKind } from './levels.ts';
 import { COLS, DX, DY, PATH, ROWS, tileAt } from './maze.ts';
 import { insetContour, wallContours } from './contours.ts';
-import { POWER_LABELS, laserOrigin, robotsLeft, waitingRobots } from './game.ts';
+import { POWER_LABELS, laserOrigin, waitingRobots } from './game.ts';
 import { cloakAmount } from './robots.ts';
 import type { Boss, Bullet, Game, Laser, Pickup, PowerKind, Robot } from './types.ts';
 
@@ -117,6 +117,8 @@ interface MazeCache {
 
 export interface View {
   ctx: CanvasRenderingContext2D;
+  /** The page has keyboard focus. Inside a frame it only gets it once clicked. */
+  focused: boolean;
   layout: Layout;
   font: string;
   stick: Stick;
@@ -1563,15 +1565,24 @@ function drawWorld(view: View, g: Game): void {
     });
   }
 
-  // Dots and power cores.
-  ctx.fillStyle = sector.dot;
+  // Dots and power cores. The last few glow, so they're easy to find.
+  const lastFew = !g.boss && g.dotsLeft <= 12;
+  const r = lastFew ? 0.15 + Math.sin(t * 6) * 0.03 : 0.1;
+  if (lastFew) {
+    for (let i = 0; i < g.dots.length; i++) {
+      if (g.dots[i] !== 1) continue;
+      const x = i % COLS;
+      glow(ctx, x, (i - x) / COLS, 0.9, '#ffd23f', 0.55 + Math.sin(t * 6) * 0.25);
+    }
+  }
+  ctx.fillStyle = lastFew ? '#fff3c4' : sector.dot;
   ctx.beginPath();
   for (let i = 0; i < g.dots.length; i++) {
     if (g.dots[i] !== 1) continue;
     const x = i % COLS;
     const y = (i - x) / COLS;
-    ctx.moveTo(x + 0.1, y);
-    ctx.arc(x, y, 0.1, 0, TAU);
+    ctx.moveTo(x + r, y);
+    ctx.arc(x, y, r, 0, TAU);
   }
   ctx.fill();
   for (let i = 0; i < g.dots.length; i++) {
@@ -1729,7 +1740,6 @@ function drawRobotEntity(ctx: CanvasRenderingContext2D, g: Game, r: Robot): void
 function drawHud(view: View, g: Game): void {
   const ctx = view.ctx;
   const sector = SECTORS[g.spec.sector];
-  const t = g.time;
   text(view, 'SCORE', 1, 0.95, 0.55, '#8a93b8', { align: 'left' });
   text(view, pad(g.score, 6), 1, 2.15, 0.95, '#ffffff', { align: 'left', weight: 800 });
   text(view, 'HI-SCORE', 27, 0.95, 0.55, '#8a93b8', { align: 'right' });
@@ -1764,9 +1774,12 @@ function drawHud(view: View, g: Game): void {
     ctx.fillStyle = 'rgba(0,0,0,0.6)';
     for (const mk of marks) ctx.fillRect(x0 + w * mk - 0.03, y - 0.1, 0.06, 0.45);
   } else if (g.state !== 'clear') {
-    const left = robotsLeft(g);
-    drawRobot(ctx, 'chaser', 12.4, y, 2, { t, scale: 0.55 });
-    text(view, `× ${left}`, 13.3, y + 0.05, 0.7, '#ffffff', { align: 'left', weight: 800 });
+    // Dots left to eat.
+    glow(ctx, 12.5, y, 0.7, '#ffd23f', 0.5);
+    ctx.fillStyle = sector.dot;
+    circle(ctx, 12.5, y, 0.2);
+    ctx.fill();
+    text(view, `× ${g.dotsLeft}`, 13.2, y + 0.05, 0.7, '#ffffff', { align: 'left', weight: 800 });
   }
 
   // Right: power-ups and overdrive.
@@ -1847,7 +1860,7 @@ function drawIntro(view: View, g: Game): void {
     panel(ctx, 4, y0, 20, h, sector.wall);
     text(view, `LEVEL ${g.level}`, 14, y0 + 1.6, 1.4, '#ffffff', { weight: 900, glow: sector.wall });
     text(view, `SECTOR ${g.spec.sector + 1}: ${sector.name}`, 14, y0 + 3.2, 0.55, sector.wall, { weight: 800 });
-    text(view, `${g.level} OF ${LEVEL_COUNT}`, 14, y0 + 4.3, 0.42, '#8a93b8');
+    text(view, `${g.level} OF ${LEVEL_COUNT}  ·  EAT EVERY DOT`, 14, y0 + 4.3, 0.42, '#8a93b8');
     if (g.spec.newKind) {
       const spec = ROBOT_SPECS[g.spec.newKind];
       ctx.strokeStyle = rgba(sector.wall, 0.4);
@@ -1909,7 +1922,10 @@ function drawPause(view: View, g: Game): void {
     ctx.stroke();
     text(view, label, r.x + r.w / 2, r.y + r.h / 2, 0.62, color, { weight: 900 });
   }
-  if (!view.layout.touch) text(view, 'P OR ESC: RESUME  ·  Q: QUIT  ·  M: SOUND', 14, 24, 0.42, '#8a93b8');
+  if (!view.layout.touch) {
+    if (!view.focused) text(view, 'CLICK THE GAME TO USE THE KEYBOARD AGAIN', 14, 24, 0.45, '#ffd23f', { weight: 800, maxWidth: 25 });
+    else text(view, 'P OR ESC: RESUME  ·  Q: QUIT  ·  M: SOUND', 14, 24, 0.42, '#8a93b8');
+  }
 }
 
 function drawGameOver(view: View, g: Game): void {
@@ -2006,7 +2022,8 @@ function drawTitle(view: View, g: Game): void {
   }
 
   const blink = Math.floor(t * 2.2) % 2 === 0;
-  if (blink) text(view, view.layout.touch ? 'TAP TO START' : 'PRESS ENTER TO START', 14, 24.4, 0.75, '#ffffff', { weight: 900, glow: '#ffd23f' });
+  const prompt = view.layout.touch ? 'TAP TO START' : view.focused ? 'PRESS ENTER TO START' : 'CLICK HERE TO START';
+  if (blink) text(view, prompt, 14, 24.4, 0.75, '#ffffff', { weight: 900, glow: '#ffd23f' });
 
   if (g.unlocked > 0) {
     const sector = SECTORS[g.menuSector];
@@ -2021,10 +2038,11 @@ function drawTitle(view: View, g: Game): void {
 
   const hints = view.layout.touch
     ? ['LEFT THUMB: SWIPE OR DRAG TO STEER', 'RIGHT THUMB: HOLD FIRE TO SHOOT']
-    : ['ARROWS OR WASD: MOVE  ·  SPACE: FIRE', 'P: PAUSE  ·  M: SOUND ON/OFF'];
+    : ['HOLD THE ARROW KEYS TO MOVE  ·  SPACE: FIRE', 'P: PAUSE  ·  M: SOUND ON/OFF'];
   text(view, hints[0], 14, 30.3, 0.42, '#c8cfe8');
   text(view, hints[1], 14, 31.4, 0.42, '#c8cfe8');
-  text(view, 'EAT A POWER CORE TO SEND THE ROBOTS RUNNING', 14, 33, 0.36, '#8a93b8', { maxWidth: 25 });
+  text(view, 'EAT EVERY DOT TO CLEAR A LEVEL', 14, 32.9, 0.4, '#ffd23f', { weight: 800, maxWidth: 25 });
+  text(view, 'POWER CORES SEND THE ROBOTS RUNNING', 14, 34, 0.36, '#8a93b8', { maxWidth: 25 });
 }
 
 function drawControls(view: View): void {

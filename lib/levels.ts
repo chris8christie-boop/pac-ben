@@ -100,9 +100,11 @@ export interface LevelSpec {
   level: number;
   sector: number;
   boss: BossKind | null;
-  quota: number;
+  /** Robots out on the maze at once. Destroyed ones are rebuilt, as Pac-Man's ghosts return. */
   maxActive: number;
   spawnEvery: number;
+  /** Seconds the factory takes to rebuild a destroyed robot. */
+  respawn: number;
   robotSpeed: number;
   playerSpeed: number;
   overdrive: number;
@@ -161,9 +163,9 @@ export function levelSpec(level: number): LevelSpec {
     level: L,
     sector,
     boss: bossLevel ? BOSS_ORDER[sector] : null,
-    quota: bossLevel ? 0 : 8 + Math.floor(step * 0.75),
-    maxActive: Math.min(4 + Math.floor(step / 4), 9),
+    maxActive: Math.min(4 + Math.floor(step / 4), 8),
     spawnEvery: Math.max(3.2 - step * 0.07, 1.2),
+    respawn: Math.max(6 - step * 0.12, 2.5),
     robotSpeed: 4.3 + step * 0.115,
     playerSpeed: 7 + step * 0.04,
     overdrive: Math.max(7 - step * 0.17, 2.5),

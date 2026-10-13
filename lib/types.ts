@@ -226,7 +226,12 @@ export interface Game {
   menuSector: number;
   player: Player;
   robots: Robot[];
+  /** The next robots out of the factory. Refilled as it empties: robots never run out. */
   queue: RobotKind[];
+  /** How many robots have been lined up this level, so the first few follow a set order. */
+  planned: number;
+  /** Robots destroyed this level. */
+  kills: number;
   spawnT: number;
   exitToggle: number;
   /** On boss levels, power-ups appear every so often. */
