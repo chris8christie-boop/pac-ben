@@ -89,7 +89,15 @@ const html = `<!doctype html>
 const __m = {};
 ${bundle}
 const level = Number(new URLSearchParams(location.search).get("level")) || undefined;
-__m.main.startPacBen(document.getElementById("game"), { level });
+// Hosts that reload the page in place (such as Claude artifacts) can hand back the run in progress.
+const hot = window.claude && window.claude.hot;
+const boot = (data) => __m.main.startPacBen(document.getElementById("game"), {
+  level,
+  resume: data && data.resume,
+  expose: (snapshot) => { if (hot && hot.snapshot) hot.snapshot(() => ({ resume: snapshot() })); },
+});
+if (hot && hot.ready) hot.ready(boot);
+else boot((hot && hot.data) || {});
 </script>
 </body>
 </html>

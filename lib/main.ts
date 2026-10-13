@@ -14,6 +14,16 @@ export interface PacBenOptions {
   font?: string;
   /** Skip the title and start at this level (for testing). */
   level?: number;
+  /** Carry on a run from where it was (after the page reloads itself). */
+  resume?: Resume | null;
+  /** Receives a function that describes the run in progress, for `resume`. */
+  expose?: (snapshot: () => Resume | null) => void;
+}
+
+export interface Resume {
+  level: number;
+  score: number;
+  lives: number;
 }
 
 const SAVE_KEY = 'pacben.save.v1';
@@ -82,10 +92,18 @@ export function startPacBen(host: HTMLElement, options: PacBenOptions = {}): () 
   const saved = load();
   const g = createGame({ hiScore: saved.hiScore, unlocked: saved.unlocked });
   const sound = createSound(saved.muted);
-  if (options.level && options.level >= 1) {
+  const resume = options.resume;
+  if (resume && resume.level >= 1 && resume.lives > 0) {
+    startRun(g, 0);
+    g.score = Math.max(0, Math.floor(resume.score) || 0);
+    g.lives = Math.floor(resume.lives);
+    while (g.nextLife <= g.score) g.nextLife += 30000;
+    loadLevel(g, resume.level);
+  } else if (options.level && options.level >= 1) {
     startRun(g, 0);
     loadLevel(g, options.level);
   }
+  options.expose?.(() => (g.state === 'title' || g.state === 'gameover' || g.state === 'victory' ? null : { level: g.level, score: g.score, lives: g.lives }));
   const coarse = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
 
   let layout: Layout = computeLayout(1, 1, 1, coarse);
@@ -93,8 +111,9 @@ export function startPacBen(host: HTMLElement, options: PacBenOptions = {}): () 
   const view: View = { ctx, layout, font, stick: input.stick, fireHeld: false, muted: saved.muted, cache: null };
 
   function resize(): void {
-    const w = Math.max(1, host.clientWidth);
-    const h = Math.max(1, host.clientHeight);
+    // The canvas's own box, so padding on the host (safe areas) is respected.
+    const w = Math.max(1, canvas.clientWidth || host.clientWidth);
+    const h = Math.max(1, canvas.clientHeight || host.clientHeight);
     const dpr = Math.min(window.devicePixelRatio || 1, 3);
     layout = computeLayout(w, h, dpr, coarse || input.touchSeen());
     view.layout = layout;
