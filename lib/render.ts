@@ -1567,7 +1567,7 @@ function drawWorld(view: View, g: Game): void {
 
   // Dots and power cores. The last few glow, so they're easy to find.
   const lastFew = !g.boss && g.dotsLeft <= 8;
-  const r = lastFew ? 0.15 + Math.sin(t * 6) * 0.03 : 0.1;
+  const r = lastFew ? 0.2 + Math.sin(t * 6) * 0.03 : 0.16;
   if (lastFew) {
     for (let i = 0; i < g.dots.length; i++) {
       if (g.dots[i] !== 1) continue;
