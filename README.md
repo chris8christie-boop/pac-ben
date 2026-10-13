@@ -13,10 +13,10 @@ A top-down maze shooter in the spirit of Pac-Man. Ben runs the corridors, eats t
 
 Ben moves while you hold a direction. Let go and he finishes the step he's on and stops, so you can stand and shoot. A turn you press early is taken at the next opening. He shoots the way he's facing. When the game sits inside another page, click it once so it gets the keyboard; it pauses if you click away.
 
-- **Clear a level** by eating every dot, as in Pac-Man. The count is at the bottom of the screen, and the last dozen glow so you can find them. Robots keep coming: the factory rebuilds each one you destroy after a few seconds. On boss levels, destroy the boss instead.
+- **Clear a level** by eating every dot, as in Pac-Man. The count is at the bottom of the screen, and the last few glow so you can find them. There are about 100 a level. Robots keep coming: the factory rebuilds each one you destroy after a few seconds. On boss levels, destroy the boss instead.
 - **Power cores** (the big pulsing dots in the corners) put Ben into overdrive. The robots turn blue and run, you can ram them for 200, 400, 800 and then 1600 points, and you fire twice as fast. On boss levels they also double your damage.
 - **Combos**: destroy robots in quick succession to multiply their points, up to ×8.
-- **Drops**: destroyed robots sometimes leave a power-up. R is rapid fire, P is piercing shots, S is seeker shots that follow the corridors to the nearest robot, the shield soaks up one hit, E is an EMP that freezes every robot, and 1UP is an extra life. Bonus items appear below the factory after 70 and 170 dots.
+- **Drops**: destroyed robots sometimes leave a power-up. R is rapid fire, P is piercing shots, S is seeker shots that follow the corridors to the nearest robot, the shield soaks up one hit, E is an EMP that freezes every robot, and 1UP is an extra life. Bonus items appear below the factory after 30 and 70 dots.
 - **Extra lives** come at 10,000 points and then every 30,000.
 - Reaching a sector unlocks it, so a new run can start there (pick it on the title screen). Your high score and unlocked sectors are kept in this browser.
 

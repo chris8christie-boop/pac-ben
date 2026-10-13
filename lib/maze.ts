@@ -473,7 +473,7 @@ export function generateMaze(level: number, opts: MazeOptions): Maze {
     }
   }
 
-  // Dots everywhere you can walk, except round the factory, the start and the pads.
+  // Dots along the corridors, except round the factory, the start and the pads.
   const dots = new Uint8Array(COLS * ROWS);
   let dotTotal = 0;
   for (let y = 0; y < ROWS; y++) {
@@ -484,6 +484,10 @@ export function generateMaze(level: number, opts: MazeOptions): Maze {
       if (y === startRow && (x === 13 || x === 14)) continue;
       if (x === 0 || x === COLS - 1) continue;
       if (portalLink[i] >= 0) continue;
+      // Two dots in every five tiles along a corridor: about a hundred a level.
+      // Measured from the nearer side so both halves of the maze match.
+      const k = (Math.min(x, COLS - 1 - x) + y) % 5;
+      if (k !== 0 && k !== 2) continue;
       dots[i] = 1;
       dotTotal++;
     }

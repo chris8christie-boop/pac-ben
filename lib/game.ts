@@ -381,7 +381,7 @@ function updatePlayer(g: Game, dt: number, c: Controls): void {
         addScore(g, 50);
         startOverdrive(g);
       }
-      if (!g.boss && (g.dotsEaten === 70 || g.dotsEaten === 170)) {
+      if (!g.boss && (g.dotsEaten === 30 || g.dotsEaten === 70)) {
         const sector = SECTORS[g.spec.sector];
         g.pickups.push({ x: m.bonus.x, y: m.bonus.y, kind: 'bonus', t: 0, life: 9.5, points: sector.bonusPoints });
         g.bonusSpawned++;
@@ -782,7 +782,7 @@ function clearLevel(g: Game): void {
   // The robots still out vanish, as Pac-Man's ghosts do.
   for (const r of g.robots) if (r.alive) killRobot(g, r, 'boss');
   g.robots = [];
-  const par = g.boss ? 120 : 30 + g.maze.dotTotal * 0.35;
+  const par = g.boss ? 120 : 30 + g.maze.dotTotal * 0.6;
   const tally = [];
   if (!g.boss) tally.push({ label: `ROBOTS DESTROYED: ${g.kills}`, value: 0 });
   const time = Math.max(0, Math.round(par - g.levelT)) * 20;

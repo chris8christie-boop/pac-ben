@@ -84,7 +84,7 @@ test('the factory, start, exits, tunnels and power cores are where the game expe
     }
     assert.equal(cores, 4, `level ${level} power cores`);
     assert.equal(dots, m.dotTotal);
-    assert.ok(dots > 150, `level ${level} has ${dots} dots`);
+    assert.ok(dots >= 80 && dots <= 135, `level ${level} has ${dots} dots`);
     assert.equal(m.portals.length, levelSpec(level).portals ? 4 : 0, `level ${level} pads`);
   }
 });
