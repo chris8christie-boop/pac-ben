@@ -299,7 +299,8 @@ export function drawControls(view: View): void {
     ctx.fillRect(2, -7, 4, 14);
   });
   icon(L.mute, () => {
-    ctx.fillStyle = 'rgba(255,255,255,0.8)';
+    const ink = view.muted ? '#ff5d73' : 'rgba(255,255,255,0.8)';
+    ctx.fillStyle = ink;
     ctx.beginPath();
     ctx.moveTo(-9, -3);
     ctx.lineTo(-5, -3);
@@ -309,7 +310,7 @@ export function drawControls(view: View): void {
     ctx.lineTo(-9, 3);
     ctx.closePath();
     ctx.fill();
-    ctx.strokeStyle = 'rgba(255,255,255,0.8)';
+    ctx.strokeStyle = ink;
     ctx.lineWidth = 1.6;
     ctx.beginPath();
     if (view.muted) {

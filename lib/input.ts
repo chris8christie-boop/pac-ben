@@ -172,9 +172,14 @@ export function createInput(canvas: HTMLCanvasElement, layout: () => Layout, onG
   }
 
   const opts: AddEventListenerOptions = { passive: false };
+  // Sound may only start inside a gesture, and phones count a tap when the finger lifts, not when it lands.
+  const gesture = () => onGesture();
   window.addEventListener('keydown', onKeyDown);
   window.addEventListener('keyup', onKeyUp);
   window.addEventListener('blur', onBlur);
+  window.addEventListener('pointerup', gesture);
+  window.addEventListener('touchend', gesture);
+  window.addEventListener('click', gesture);
   canvas.addEventListener('pointerdown', onPointerDown, opts);
   canvas.addEventListener('pointermove', onPointerMove, opts);
   canvas.addEventListener('pointerup', onPointerUp);
@@ -242,6 +247,9 @@ export function createInput(canvas: HTMLCanvasElement, layout: () => Layout, onG
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
       window.removeEventListener('blur', onBlur);
+      window.removeEventListener('pointerup', gesture);
+      window.removeEventListener('touchend', gesture);
+      window.removeEventListener('click', gesture);
       canvas.removeEventListener('pointerdown', onPointerDown);
       canvas.removeEventListener('pointermove', onPointerMove);
       canvas.removeEventListener('pointerup', onPointerUp);

@@ -513,7 +513,10 @@ export function drawTitle(view: View, g: Game): void {
   const hints = view.layout.touch
     ? ['TAP A ROW TO CHOOSE  ·  TAP AGAIN TO START', 'LEFT THUMB STEERS  ·  RIGHT THUMB FIRES']
     : ['↑ ↓ CHOOSE  ·  ◀ ▶ CHANGE  ·  ENTER: START', 'HOLD THE ARROWS TO MOVE  ·  SPACE: FIRE  ·  P: PAUSE  ·  M: SOUND'];
-  text(view, hints[0], 14, 30.4, 0.4, '#c8cfe8', { maxWidth: 26 });
+  if (view.muted) {
+    const off = view.layout.touch ? 'SOUND IS OFF  ·  TAP THE SPEAKER BUTTON TO TURN IT ON' : 'SOUND IS OFF  ·  PRESS M TO TURN IT ON';
+    text(view, off, 14, 30.4, 0.46, '#ff7a8c', { weight: 900, maxWidth: 26, glow: '#ff2d55', alpha: 0.8 + 0.2 * Math.sin(t * 5) });
+  } else text(view, hints[0], 14, 30.4, 0.4, '#c8cfe8', { maxWidth: 26 });
   text(view, hints[1], 14, 31.4, 0.38, '#8a93b8', { maxWidth: 26 });
   text(view, 'EAT EVERY DOT TO CLEAR A LEVEL  ·  POWER CORES SEND THE ROBOTS RUNNING', 14, 32.7, 0.36, '#ffd23f', { weight: 800, maxWidth: 26 });
   text(view, CREDITS, 14, 34.6, 0.42, '#ffd23f', { weight: 900, glow: '#ff9d00', alpha: 0.85 });

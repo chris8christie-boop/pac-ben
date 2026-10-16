@@ -14,6 +14,12 @@ export interface Sound {
   dispose(): void;
 }
 
+/**
+ * Overall loudness. The parts are mixed quietly so they can stack; this brings the whole mix up to the
+ * level of other games and videos, and the limiter after it keeps the loudest moments from distorting.
+ */
+const VOLUME = 6;
+
 const ROOTS = [45, 43, 46, 41, 44, 42];
 const TEMPOS = [118, 122, 126, 130, 134, 138];
 
@@ -41,28 +47,71 @@ export function createSound(startMuted: boolean): Sound {
     return !!ac && ac.state === 'running';
   }
 
+  /**
+   * iPhones and iPads treat Web Audio like a ringtone, so the ring/silent switch mutes it. Asking for
+   * "playback" (Safari 16.4 and later) makes the game sound like a video does. Older Safari gets the
+   * same effect from a silent <audio> element kept playing.
+   */
+  let silent: HTMLAudioElement | null = null;
+  function wakeApple(): void {
+    const nav = navigator as Navigator & { audioSession?: { type: string } };
+    if (nav.audioSession) {
+      try {
+        if (nav.audioSession.type !== 'playback') nav.audioSession.type = 'playback';
+      } catch {
+        // Not allowed here; the switch just keeps its say.
+      }
+      return;
+    }
+    const apple = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.userAgent.includes('Macintosh') && navigator.maxTouchPoints > 1);
+    if (!apple) return;
+    if (!silent) {
+      silent = new Audio(silentWav());
+      silent.loop = true;
+      silent.setAttribute('playsinline', '');
+    }
+    if (silent.paused) silent.play().catch(() => undefined);
+  }
+
+  /** Call from every key press and tap: browsers only let sound start inside one. */
   function unlock(): void {
+    wakeApple();
     if (!ac) {
       const AC = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
       if (!AC) return;
-      ac = new AC();
+      ac = new AC({ latencyHint: 'interactive' });
       master = ac.createGain();
-      master.gain.value = muted ? 0 : 0.7;
-      const comp = ac.createDynamicsCompressor();
-      master.connect(comp);
-      comp.connect(ac.destination);
+      master.gain.value = muted ? 0 : VOLUME;
+      const limiter = ac.createDynamicsCompressor();
+      limiter.threshold.value = -9;
+      limiter.knee.value = 4;
+      limiter.ratio.value = 16;
+      limiter.attack.value = 0.002;
+      limiter.release.value = 0.12;
+      master.connect(limiter);
+      limiter.connect(ac.destination);
       sfx = ac.createGain();
       sfx.gain.value = 0.9;
       sfx.connect(master);
       mus = ac.createGain();
-      mus.gain.value = 0.3;
+      mus.gain.value = 0.4;
       mus.connect(master);
       noiseBuf = ac.createBuffer(1, ac.sampleRate, ac.sampleRate);
       const data = noiseBuf.getChannelData(0);
       for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
     }
-    if (ac.state === 'suspended') void ac.resume().then(() => music(wanted));
-    else music(wanted);
+    // 'suspended' before the first gesture, 'interrupted' on iOS after a call or a trip to another app.
+    if (ac.state !== 'running' && ac.state !== 'closed') {
+      // Older iOS only wakes once something actually plays inside the gesture.
+      const blip = ac.createBufferSource();
+      blip.buffer = ac.createBuffer(1, 1, 22050);
+      blip.connect(ac.destination);
+      blip.start(0);
+      ac.resume().then(
+        () => music(wanted),
+        () => undefined,
+      );
+    } else music(wanted);
   }
 
   interface ToneOptions {
@@ -427,7 +476,7 @@ export function createSound(startMuted: boolean): Sound {
     music,
     setMuted(m: boolean) {
       muted = m;
-      if (master && ac) master.gain.setTargetAtTime(m ? 0 : 0.7, ac.currentTime, 0.02);
+      if (master && ac) master.gain.setTargetAtTime(m ? 0 : VOLUME, ac.currentTime, 0.02);
       music(wanted);
     },
     isMuted: () => muted,
@@ -437,6 +486,33 @@ export function createSound(startMuted: boolean): Sound {
       track = null;
       if (ac) void ac.close();
       ac = null;
+      silent?.pause();
+      silent = null;
     },
   };
+}
+
+/** Half a second of silence as a WAV file, for the <audio> element that wakes older iPhones. */
+function silentWav(): string {
+  const n = 4000;
+  const b = new DataView(new ArrayBuffer(44 + n));
+  const tag = (at: number, t: string) => {
+    for (let i = 0; i < t.length; i++) b.setUint8(at + i, t.charCodeAt(i));
+  };
+  tag(0, 'RIFF');
+  b.setUint32(4, 36 + n, true);
+  tag(8, 'WAVE');
+  tag(12, 'fmt ');
+  b.setUint32(16, 16, true);
+  b.setUint16(20, 1, true); // PCM
+  b.setUint16(22, 1, true); // mono
+  b.setUint32(24, 8000, true); // samples a second
+  b.setUint32(28, 8000, true); // bytes a second
+  b.setUint16(32, 1, true);
+  b.setUint16(34, 8, true); // 8-bit, where silence is 128
+  tag(36, 'data');
+  b.setUint32(40, n, true);
+  let bin = '';
+  for (let i = 0; i < 44 + n; i++) bin += String.fromCharCode(i < 44 ? b.getUint8(i) : 128);
+  return 'data:audio/wav;base64,' + btoa(bin);
 }
