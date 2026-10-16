@@ -5,8 +5,10 @@
 import { createSound } from './audio.ts';
 import { createGame, drainEvents, loadLevel, runSnapshot, startRun, STEP, titleRows, update } from './game.ts';
 import { createInput } from './input.ts';
-import { GH, GW, UI, computeLayout, render, titleRowRect } from './render.ts';
-import type { Layout, View } from './render.ts';
+import { render } from './render.ts';
+import { titleRowRect } from './render-screens.ts';
+import { GH, GW, UI, computeLayout } from './render-util.ts';
+import type { Layout, View } from './render-util.ts';
 import type { Difficulty } from './levels.ts';
 import type { Controls, Game, SavedRun } from './types.ts';
 

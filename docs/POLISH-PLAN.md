@@ -30,13 +30,13 @@ What holds it back:
 
 ## Phase 0: foundation (do first, in this order)
 
-**0.1 Fix the teleport pad.** In `advance()` (`lib/maze.ts`), clear `portalLock` as soon as the mover is no longer standing exactly on the locked pad, not only when it reaches another tile centre. Done when `pnpm test` shows 20 passing, including the full-run bot.
+**0.1 Fix the teleport pad.** ✅ Done. In `advance()` (`lib/maze.ts`), clear `portalLock` as soon as the mover is no longer standing exactly on the locked pad, not only when it reaches another tile centre. Done when `pnpm test` shows 20 passing, including the full-run bot.
 
-**0.2 Split `render.ts`** into flat files: `render-maze.ts` (maze cache, dots, pads, factory), `render-ben.ts` (`drawBen`), `render-robots.ts` (`drawRobot`), `render-bosses.ts` (all boss drawing), `render-fx.ts` (shots, lasers, pickups, particles, popups, glow helpers), `render-screens.ts` (title, intro, clear, pause, game over, victory), `render-hud.ts`, and keep `render.ts` as the entry (`computeLayout`, `UI`, `View`, `render()`). Pure move, no behaviour change; screenshots before and after must match.
+**0.2 Split `render.ts`** ✅ Done. into flat files: `render-maze.ts` (maze cache, dots, pads, factory), `render-ben.ts` (`drawBen`), `render-robots.ts` (`drawRobot`), `render-bosses.ts` (all boss drawing), `render-fx.ts` (shots, lasers, pickups, particles, popups, glow helpers), `render-screens.ts` (title, intro, clear, pause, game over, victory), `render-hud.ts`, and keep `render.ts` as the entry (`computeLayout`, `UI`, `View`, `render()`). Pure move, no behaviour change; screenshots before and after must match.
 
-**0.3 Continue where you left off.** Save `{ level, score, lives, difficulty }` at every level start and after every death (`lib/main.ts`, same `localStorage` key family). The title screen shows **CONTINUE** (level N) above **NEW GAME** when a save exists. Test: a game at level 7 with 2 lives, recreated from its save, starts at level 7 with 2 lives and the score intact.
+**0.3 Continue where you left off.** ✅ Done. Save `{ level, score, lives, difficulty }` at every level start and after every death (`lib/main.ts`, same `localStorage` key family). The title screen shows **CONTINUE** (level N) above **NEW GAME** when a save exists. Test: a game at level 7 with 2 lives, recreated from its save, starts at level 7 with 2 lives and the score intact.
 
-**0.4 Three difficulties** chosen on the title screen and saved: **ROOKIE** (robot speed ×0.8, overdrive ×1.5, 5 lives, respawn delay ×1.5, boss HP ×0.7), **HERO** (as now), **LEGEND** (robot speed ×1.15, 2 lives, boss HP ×1.3, bullets ×1.2 speed). Implement as a multiplier set applied in `levelSpec()` and `createBoss()`; tests check each multiplier. Rookie is the default on first run.
+**0.4 Three difficulties** ✅ Done. chosen on the title screen and saved: **ROOKIE** (robot speed ×0.8, overdrive ×1.5, 5 lives, respawn delay ×1.5, boss HP ×0.7), **HERO** (as now), **LEGEND** (robot speed ×1.15, 2 lives, boss HP ×1.3, bullets ×1.2 speed). Implement as a multiplier set applied in `levelSpec()` and `createBoss()`; tests check each multiplier. Rookie is the default on first run.
 
 ## Phase 1: make it Ben's game
 

@@ -2,7 +2,7 @@
  * Keyboard, touch and gamepad. Touch has a floating stick for the left thumb
  * (or a swipe anywhere) and a fire button for the right.
  */
-import type { Layout, Stick } from './render.ts';
+import type { Layout, Stick } from './render-util.ts';
 import type { Controls } from './types.ts';
 
 export interface Tap {

@@ -13,12 +13,14 @@ A top-down maze shooter in the spirit of Pac-Man. Ben runs the corridors, eats t
 
 Ben moves while you hold a direction. Let go and he finishes the step he's on and stops, so you can stand and shoot. A turn you press early is taken at the next opening. He shoots the way he's facing. When the game sits inside another page, click it once so it gets the keyboard; it pauses if you click away.
 
+- **Difficulty:** Rookie (the default) slows the robots and their shots, makes overdrive last longer, rebuilds destroyed robots more slowly and gives five lives and weaker bosses. Hero is the game as designed. Legend has faster robots, two lives and tougher bosses.
+- **Continue:** the run in progress (level, score, lives, difficulty) is saved in the browser, so CONTINUE on the title picks it up next time. Game over or finishing the game clears it.
 - **Clear a level** by eating every dot, as in Pac-Man. The count is at the bottom of the screen, and the last few glow so you can find them. There are about 100 a level. Robots keep coming: the factory rebuilds each one you destroy after a few seconds. On boss levels, destroy the boss instead.
 - **Power cores** (the big pulsing dots in the corners) put Ben into overdrive. The robots turn blue and run, you can ram them for 200, 400, 800 and then 1600 points, and you fire twice as fast. On boss levels they also double your damage.
 - **Combos**: destroy robots in quick succession to multiply their points, up to ×8.
 - **Drops**: destroyed robots sometimes leave a power-up. R is rapid fire, P is piercing shots, S is seeker shots that follow the corridors to the nearest robot, the shield soaks up one hit, E is an EMP that freezes every robot, and 1UP is an extra life. Bonus items appear below the factory after 30 and 70 dots.
 - **Extra lives** come at 10,000 points and then every 30,000.
-- Reaching a sector unlocks it, so a new run can start there (pick it on the title screen). Your high score and unlocked sectors are kept in this browser.
+- Reaching a sector unlocks it, so a new run can start there (pick it on the title screen). Your high score, unlocked sectors, difficulty and run in progress are kept in this browser.
 
 ## Sectors, robots and bosses
 
@@ -69,7 +71,7 @@ The game is plain TypeScript drawn on one canvas. React only gives the canvas so
 | `lib/game.ts` | Game state and rules: Ben, shooting, dots, power-ups, scoring, lives and level flow |
 | `lib/robots.ts` | Robot brains |
 | `lib/bosses.ts` | The six bosses |
-| `lib/render.ts`, `lib/contours.ts` | All drawing. Wall outlines are traced from the tile grid, inset and rounded for the neon look |
+| `lib/render.ts`, `lib/render-*.ts`, `lib/contours.ts` | All drawing: `render.ts` draws a frame; `-util` holds the layout and helpers, `-maze`, `-ben`, `-robots`, `-bosses`, `-fx`, `-hud` and `-screens` draw each part. Wall outlines are traced from the tile grid, inset and rounded for the neon look |
 | `lib/audio.ts` | Sound effects and music, synthesised with Web Audio (no sound files) |
 | `lib/input.ts` | Keyboard, touch and gamepad |
 | `lib/main.ts` | The game loop and saved progress |
