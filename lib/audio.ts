@@ -6,7 +6,7 @@
 
 export interface Sound {
   unlock(): void;
-  play(name: string): void;
+  play(name: string, n?: number): void;
   /** 'title', 'sector:N', 'boss:N', or null for silence. */
   music(track: string | null): void;
   setMuted(muted: boolean): void;
@@ -127,7 +127,7 @@ export function createSound(startMuted: boolean): Sound {
   /** Minimum time between two plays of the same sound, so a burst of events doesn't clip. */
   const THROTTLE: Record<string, number> = { dot: 0.06, shoot: 0.05, zap: 0.08, bosshit: 0.06, clink: 0.06, pop: 0.05, clank: 0.05, kill: 0.04, enemyshot: 0.08, teleport: 0.2, spawn: 0.2 };
 
-  function play(name: string): void {
+  function play(name: string, n = 0): void {
     if (!ready() || muted) return;
     const now = ac!.currentTime;
     const gap = THROTTLE[name];
@@ -138,9 +138,23 @@ export function createSound(startMuted: boolean): Sound {
         tone(1100, 0.07, { to: 520, vol: 0.045 });
         tone(2300, 0.04, { type: 'triangle', to: 1200, vol: 0.025 });
         break;
-      case 'dot':
+      case 'dot': {
+        // The waka climbs as Ben eats dots in quick succession.
         waka = !waka;
-        tone(waka ? 470 : 620, 0.06, { type: 'triangle', to: waka ? 380 : 520, vol: 0.06 });
+        const up = 2 ** ((Math.min(n, 8) * 1.5) / 12);
+        tone((waka ? 470 : 620) * up, 0.06, { type: 'triangle', to: (waka ? 380 : 520) * up, vol: 0.06 });
+        break;
+      }
+      case 'heartbeat':
+        tone(70, 0.12, { type: 'sine', to: 45, vol: 0.35 });
+        tone(64, 0.12, { type: 'sine', to: 40, vol: 0.28, delay: 0.16 });
+        break;
+      case 'combo':
+        arp([72, 79, 84], 0.05, { vol: 0.06 });
+        break;
+      case 'megacombo':
+        arp([72, 76, 79, 84, 88, 91, 96], 0.045, { vol: 0.06 });
+        noise(0.4, { filter: 'highpass', f: 3000, vol: 0.08 });
         break;
       case 'power':
         arp([60, 64, 67, 72, 76, 79], 0.045, { vol: 0.05 });

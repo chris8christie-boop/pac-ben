@@ -214,6 +214,9 @@ export function killRobot(g: Game, r: Robot, how: 'shot' | 'eaten' | 'boss'): vo
   g.shake = Math.max(g.shake, 0.12);
   emit(g, how === 'eaten' ? 'eat' : 'kill', r.x, r.y);
   if (how === 'boss') return;
+  g.freeze = Math.max(g.freeze, 0.05);
+  g.edgeFlash = 0.6;
+  g.edgeColor = r.frightened ? '#4a6bff' : spec.color;
   if (!r.minion && r.kind !== 'mini') {
     g.kills++;
     g.run.kills++;
@@ -228,6 +231,11 @@ export function killRobot(g: Game, r: Robot, how: 'shot' | 'eaten' | 'boss'): vo
   } else {
     g.combo = g.comboT > 0 ? g.combo + 1 : 1;
     g.comboT = 1.6;
+    if (g.combo === 4 || g.combo === 8) {
+      const mega = g.combo === 8;
+      g.banner = { text: mega ? 'MEGA COMBO!' : 'GREAT!', sub: '', t: 0, life: 1.1, color: mega ? '#ff3fd2' : '#ffd23f' };
+      emit(g, mega ? 'megacombo' : 'combo', r.x, r.y);
+    }
     const mult = Math.min(g.combo, 8);
     addScore(g, spec.points * mult, r.x, r.y, mult > 1 ? '#ffd23f' : '#ffffff');
     if (mult > 1) popup(g, r.x, r.y - 0.9, `x${mult}`, '#ffd23f', 0.6);
