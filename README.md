@@ -44,6 +44,8 @@ pnpm dev            # http://127.0.0.1:4322
 
 Add `?level=15` to the address to jump straight to a level while testing.
 
+What's planned next, phase by phase: [the polish plan](docs/POLISH-PLAN.md).
+
 `pnpm standalone` writes `standalone/pacben.html`, the whole game in one file that you can open from disk or put on any static host. Text uses the Orbitron font from Google Fonts and falls back to the system font offline.
 
 Checks:
