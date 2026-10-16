@@ -784,6 +784,7 @@ export function damageBoss(g: Game, amount: number): void {
     addScore(g, spec.points, b.x, b.y - b.r - 0.5, spec.color);
     emit(g, 'bossdie', b.x, b.y);
     bossSays(g, 2);
+    g.freeze = 0.15;
     g.shake = 0.8;
     return;
   }
@@ -791,6 +792,7 @@ export function damageBoss(g: Game, amount: number): void {
   if (phase > b.phase) {
     if (b.phase === 1) bossSays(g, 1);
     b.phase = phase;
+    g.freeze = 0.15;
     clearEnemyFire(g);
     g.flash = 0.35;
     g.flashColor = BOSS_SPECS[b.kind].color;

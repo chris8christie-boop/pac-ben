@@ -216,6 +216,8 @@ export interface GameEvent {
   type: string;
   x?: number;
   y?: number;
+  /** A count that shapes the sound, such as how many dots in a row. */
+  n?: number;
 }
 
 export interface Banner {
@@ -298,6 +300,18 @@ export interface Game {
   flash: number;
   flashColor: string;
   glitch: number;
+  /** Hit-stop: the world holds still for a moment after a big hit. */
+  freeze: number;
+  /** Dots eaten in quick succession, for the rising waka. */
+  dotStreak: number;
+  dotStreakT: number;
+  /** Seconds since the last dot, and the dot the radar points at (-1 for none). */
+  sinceDot: number;
+  radar: number;
+  heartT: number;
+  /** The screen's edges glow in the colour of what was just destroyed. */
+  edgeFlash: number;
+  edgeColor: string;
   events: GameEvent[];
   banner: Banner | null;
   tally: Tally[];

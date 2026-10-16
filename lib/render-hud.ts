@@ -16,7 +16,9 @@ export function drawHud(view: View, g: Game): void {
   text(view, 'HI-SCORE', 27, 0.95, 0.55, '#8a93b8', { align: 'right' });
   text(view, pad(g.hiScore, 6), 27, 2.15, 0.95, '#ffd23f', { align: 'right', weight: 800 });
   if (g.state !== 'title') {
-    text(view, `LEVEL ${g.level}`, 14, 1.05, 0.8, sector.wall, { weight: 900, glow: sector.wall });
+    // The level number punches in as each new level starts.
+    const punch = g.state === 'intro' && !g.respawn ? 1 + 0.6 * Math.max(0, 1 - Math.max(0, g.stateT - 0.3) / 0.5) * Math.min(1, g.stateT / 0.3) : 1;
+    text(view, `LEVEL ${g.level}`, 14, 1.05, 0.8 * punch, sector.wall, { weight: 900, glow: sector.wall });
     text(view, `${sector.name}${g.spec.boss ? ' · BOSS' : ''}`, 14, 2.2, 0.48, '#8a93b8');
   }
   if (g.state === 'title') return;
@@ -74,5 +76,21 @@ export function drawHud(view: View, g: Game): void {
     rx -= 4.8;
   }
   if (p.shield) drawShieldIcon(ctx, rx - 0.3, y + 0.1, 1.3, '#7fd8ff');
-  if (g.combo >= 2 && g.comboT > 0) text(view, `COMBO ×${Math.min(g.combo, 8)}`, 14, HUD_TOP + 0.9, 0.6, '#ffd23f', { weight: 900, stroke: 'rgba(0,0,0,0.6)', alpha: Math.min(1, g.comboT * 2) });
+  if (g.combo >= 2 && g.comboT > 0) {
+    const a = Math.min(1, g.comboT * 2);
+    const color = g.combo >= 8 ? '#ff3fd2' : '#ffd23f';
+    text(view, `COMBO ×${Math.min(g.combo, 8)}`, 14, HUD_TOP + 0.9, 0.6, color, { weight: 900, stroke: 'rgba(0,0,0,0.6)', alpha: a });
+    // The bar drains: kill again before it empties to keep the combo.
+    const w = 6 * Math.min(1, g.comboT / 1.6);
+    const ctx = view.ctx;
+    ctx.save();
+    ctx.globalAlpha = a;
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    roundRect(ctx, 11, HUD_TOP + 1.45, 6, 0.22, 0.11);
+    ctx.fill();
+    ctx.fillStyle = color;
+    roundRect(ctx, 14 - w / 2, HUD_TOP + 1.45, w, 0.22, 0.11);
+    ctx.fill();
+    ctx.restore();
+  }
 }

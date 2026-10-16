@@ -238,7 +238,7 @@ export function startPacBen(host: HTMLElement, options: PacBenOptions = {}): () 
       acc -= STEP;
     }
 
-    for (const e of drainEvents(g)) sound.play(e.type);
+    for (const e of drainEvents(g)) sound.play(e.type, e.n);
     sound.music(musicFor(g));
 
     view.fireHeld = input.fireHeld();

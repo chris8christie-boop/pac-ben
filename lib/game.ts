@@ -154,6 +154,14 @@ export function createGame(save: SaveData, seed = Date.now()): Game {
     flash: 0,
     flashColor: '#ffffff',
     glitch: 0,
+    freeze: 0,
+    dotStreak: 0,
+    dotStreakT: 0,
+    sinceDot: 0,
+    radar: -1,
+    heartT: 0,
+    edgeFlash: 0,
+    edgeColor: '#ffffff',
     events: [],
     banner: null,
     tally: [],
@@ -294,6 +302,11 @@ export function loadLevel(g: Game, level: number): void {
   g.chain = 0;
   g.levelT = 0;
   g.levelHits = 0;
+  g.sinceDot = 0;
+  g.radar = -1;
+  g.dotStreak = 0;
+  g.dotStreakT = 0;
+  g.freeze = 0;
   g.spawnT = 0.3;
   g.exitToggle = 0;
   g.bossDropT = 10;
@@ -339,6 +352,13 @@ export function update(g: Game, dt: number, c: Controls): void {
     } else if (c.back) toTitle(g);
     return;
   }
+  if (g.freeze > 0) {
+    // Hit-stop: everything holds for a beat; only the shake and flash carry on.
+    g.freeze = Math.max(0, g.freeze - dt);
+    g.shake = Math.max(0, g.shake - dt * 2.2);
+    g.flash = Math.max(0, g.flash - dt * 1.6);
+    return;
+  }
   updateFx(g, dt);
   g.stateT += dt;
   switch (g.state) {
@@ -355,14 +375,29 @@ export function update(g: Game, dt: number, c: Controls): void {
         break;
       }
       for (const r of g.robots) r.anim += dt;
-      if (g.boss) g.boss.t += dt;
+      if (g.boss) {
+        g.boss.t += dt;
+        // On its first entrance the boss drops in from above and lands as play begins.
+        if (!g.respawn) {
+          const k = Math.min(1, g.stateT / g.introLength);
+          g.boss.y = g.boss.home.y - 16 * (1 - k) ** 3;
+        }
+      }
       if (g.stateT >= g.introLength) {
         g.state = 'play';
         g.stateT = 0;
         emit(g, 'go');
         if (!g.respawn) {
           popup(g, g.player.x, g.player.y - 1.1, "LET'S GO!", '#ffd23f', 1);
-          if (g.boss) bossSays(g, 0);
+          if (g.boss) {
+            const b = g.boss;
+            b.y = b.home.y;
+            g.shake = 0.9;
+            g.freeze = 0.12;
+            burst(g, b.x, b.y + b.r, BOSS_SPECS[b.kind].color, 40, 10, 2);
+            emit(g, 'slam', b.x, b.y);
+            bossSays(g, 0);
+          }
         }
       }
       break;
@@ -438,6 +473,9 @@ function titleMenu(g: Game, c: Controls): void {
 function tick(g: Game, dt: number, c: Controls): void {
   g.levelT += dt;
   g.run.time += dt;
+  updateRadar(g, dt);
+  if (g.dotStreakT > 0) g.dotStreakT -= dt;
+  if (g.edgeFlash > 0) g.edgeFlash = Math.max(0, g.edgeFlash - dt * 2.5);
   if (!g.boss) updateModes(g, dt);
   updatePlayer(g, dt, c);
   updateDistances(g);
@@ -459,6 +497,26 @@ function tick(g: Game, dt: number, c: Controls): void {
   g.robots = g.robots.filter((r) => r.alive);
   g.mines = g.mines.filter((m) => !m.dead);
   if (g.state === 'play') checkClear(g);
+}
+
+/** After 8 seconds without a dot, with fewer than 20 left, point Ben at the nearest one. */
+function updateRadar(g: Game, dt: number): void {
+  g.sinceDot += dt;
+  if (g.boss || g.dotsLeft <= 0 || g.dotsLeft >= 20 || g.sinceDot < 8) {
+    g.radar = -1;
+    return;
+  }
+  let best = -1;
+  let bestD = Infinity;
+  for (let i = 0; i < g.dots.length; i++) {
+    if (!g.dots[i]) continue;
+    const d = g.distPlayer[i];
+    if (d >= 0 && d < bestD) {
+      bestD = d;
+      best = i;
+    }
+  }
+  g.radar = best;
 }
 
 function updateModes(g: Game, dt: number): void {
@@ -529,9 +587,14 @@ function updatePlayer(g: Game, dt: number, c: Controls): void {
       g.dotsLeft--;
       g.dotsEaten++;
       g.run.dots++;
+      g.sinceDot = 0;
+      g.radar = -1;
+      g.dotStreak = g.dotStreakT > 0 ? Math.min(g.dotStreak + 1, 8) : 0;
+      g.dotStreakT = 0.5;
+      particle(g, 'ring', tx, ty, 0, 0, 0.2, '#ffe9b0', 0.55);
       if (dot === 1) {
         addScore(g, 10);
-        emit(g, 'dot', tx, ty);
+        g.events.push({ type: 'dot', x: tx, y: ty, n: g.dotStreak });
       } else {
         addScore(g, 50);
         startOverdrive(g);
@@ -559,6 +622,14 @@ function updatePlayer(g: Game, dt: number, c: Controls): void {
     }
   }
   if (p.overdrive > 0) {
+    if (g.rng() < dt * 40) particle(g, 'glow', p.x, p.y, 0, 0, 0.4, '#5a8bff', 0.75);
+    if (p.overdrive < 2) {
+      g.heartT -= dt;
+      if (g.heartT <= 0) {
+        g.heartT = 0.5;
+        emit(g, 'heartbeat');
+      }
+    }
     p.overdrive -= dt;
     if (p.overdrive <= 0) {
       p.overdrive = 0;

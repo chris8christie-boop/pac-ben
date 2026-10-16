@@ -50,19 +50,19 @@ What holds it back:
 
 ## Phase 2: feel
 
-**2.1 Hit-stop.** Freeze the simulation for 50 ms on a robot kill and 150 ms on a boss phase change or boss death (`g.freeze` countdown in `update()`; the renderer keeps drawing). Test: during a freeze, positions don't change.
+**2.1 Hit-stop.** ✅ Done. Freeze the simulation for 50 ms on a robot kill and 150 ms on a boss phase change or boss death (`g.freeze` countdown in `update()`; the renderer keeps drawing). Test: during a freeze, positions don't change.
 
-**2.2 Level transitions.** A neon iris closes on level clear and opens on the next level's intro; the HUD level number counts up.
+**2.2 Level transitions.** ✅ Done. A neon iris closes on level clear and opens on the next level's intro; the HUD level number counts up.
 
-**2.3 Dot eating feels good.** Tiny pop particle per dot; the "waka" pitch rises one step for each dot eaten within 0.5 s of the last (resets after), capped at 8 steps.
+**2.3 Dot eating feels good.** ✅ Done. Tiny pop particle per dot; the "waka" pitch rises one step for each dot eaten within 0.5 s of the last (resets after), capped at 8 steps.
 
-**2.4 Overdrive.** Ben leaves a glowing trail; the maze walls pulse in time with the music; robots' eyes turn to wide "scared" eyes (exists) and a heartbeat sound fades in for the last 2 s.
+**2.4 Overdrive.** ✅ Done. Ben leaves a glowing trail; the maze walls pulse in time with the music; robots' eyes turn to wide "scared" eyes (exists) and a heartbeat sound fades in for the last 2 s.
 
-**2.5 Kills.** Score popups scale-punch (1.4× to 1×); the screen edge flashes in the robot's colour; combo ×4 and ×8 shout "GREAT!" / "MEGA COMBO!" in big text; HUD combo bar drains visibly.
+**2.5 Kills.** ✅ Done. Score popups scale-punch (1.4× to 1×); the screen edge flashes in the robot's colour; combo ×4 and ×8 shout "GREAT!" / "MEGA COMBO!" in big text; HUD combo bar drains visibly.
 
-**2.6 Boss entrance.** The warning panel shows the boss drawn large and animated; the screen shakes as it lands; the name card slams in from the side.
+**2.6 Boss entrance.** ✅ Done. The warning panel shows the boss drawn large and animated; the screen shakes as it lands; the name card slams in from the side.
 
-**2.7 Dot radar.** If no dot has been eaten for 8 s and fewer than 20 remain, draw a soft arrow beside Ben pointing to the nearest dot (use `distanceMap` from the dots).
+**2.7 Dot radar.** ✅ Done. If no dot has been eaten for 8 s and fewer than 20 remain, draw a soft arrow beside Ben pointing to the nearest dot (use `distanceMap` from the dots).
 
 ## Phase 3: rewards
 

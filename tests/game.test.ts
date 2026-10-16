@@ -1,6 +1,8 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import { damageBoss } from '../lib/bosses.ts';
+import { killRobot } from '../lib/robots.ts';
+import { makeRobot } from '../lib/world.ts';
 import { continueRun, createGame, drainEvents, hitPlayer, loadLevel, NO_INPUT, robotsOut, runSnapshot, startRun, STEP, storyTyped, titleRows, update } from '../lib/game.ts';
 import { BOSS_ORDER, BOSS_SPECS, CREDITS_TIME, DIFFICULTIES, LEVEL_COUNT, STORY, levelSpec } from '../lib/levels.ts';
 import { DOWN, DX, DY, LEFT, RIGHT, UP, atCentre, canGo, tileIndex } from '../lib/maze.ts';
@@ -480,4 +482,75 @@ test('Ben says LET\'S GO at the start of a level and YES when it is cleared', ()
   run(g, STEP * 2);
   assert.equal(g.state, 'clear');
   assert.ok(g.popups.some((q) => q.text === 'YES!'));
+});
+
+test('a kill freezes the action for a beat (hit-stop)', () => {
+  const g = playing();
+  run(g, 2);
+  const r = g.robots.find((x) => x.spawnT <= 0)!;
+  assert.ok(r);
+  killRobot(g, r, 'shot');
+  assert.ok(g.freeze > 0);
+  const others = g.robots.filter((x) => x.alive).map((x) => [x.x, x.y]);
+  const px = g.player.x;
+  update(g, STEP, { ...NO_INPUT, dir: LEFT });
+  assert.equal(g.player.x, px, 'Ben holds still');
+  assert.deepEqual(g.robots.filter((x) => x.alive).map((x) => [x.x, x.y]), others, 'robots hold still');
+  run(g, 0.1, { dir: LEFT });
+  assert.notEqual(g.player.x, px, 'then the action resumes');
+  assert.ok(g.edgeFlash > 0);
+});
+
+test('four and eight kills in a row get a shout', () => {
+  const g = playing();
+  run(g, 2);
+  const kill = () => {
+    const r = makeRobot(g, 'chaser', g.player.x, 1, 1);
+    r.spawnT = 0;
+    killRobot(g, r, 'shot');
+    g.freeze = 0;
+  };
+  for (let i = 0; i < 4; i++) kill();
+  assert.equal(g.banner?.text, 'GREAT!');
+  for (let i = 0; i < 4; i++) kill();
+  assert.equal(g.banner?.text, 'MEGA COMBO!');
+});
+
+test('dots eaten in quick succession raise the waka', () => {
+  const g = playing();
+  const seen: number[] = [];
+  for (let t = 0; t < 2; t += STEP) {
+    update(g, STEP, { ...NO_INPUT, dir: LEFT });
+    for (const e of drainEvents(g)) if (e.type === 'dot') seen.push(e.n ?? -1);
+  }
+  assert.ok(seen.length >= 3, `ate ${seen.length} dots`);
+  assert.ok(Math.max(...seen) > 0, 'the streak counts up');
+  assert.ok(seen.every((n) => n >= 0 && n <= 8));
+});
+
+test('the radar points at the nearest dot after a while without one', () => {
+  const g = playing();
+  run(g, 0.5);
+  const keep = g.dots.findIndex((d) => d === 1);
+  g.dots.fill(0);
+  g.dots[keep] = 1;
+  g.dotsLeft = 1;
+  g.player.invuln = 99;
+  run(g, 1);
+  assert.equal(g.radar, -1, 'not straight away');
+  g.sinceDot = 8;
+  run(g, STEP * 2);
+  assert.equal(g.radar, keep);
+});
+
+test('a boss drops in during its warning and slams down as play starts', () => {
+  const g = createGame({ hiScore: 0, unlocked: 5, difficulty: 'hero' }, 3);
+  startRun(g, 0);
+  loadLevel(g, 5);
+  run(g, g.introLength / 2);
+  assert.ok(g.boss!.y < g.boss!.home.y - 1, 'still coming down');
+  run(g, g.introLength / 2 + 0.05);
+  assert.equal(g.state, 'play');
+  assert.equal(g.boss!.y, g.boss!.home.y);
+  assert.ok(g.shake > 0);
 });

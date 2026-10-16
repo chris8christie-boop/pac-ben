@@ -2,7 +2,7 @@
  * Drawing, entry point: the world each frame, the touch controls, and the
  * screens on top. See render-util.ts for the layout and the helpers.
  */
-import { HUD_TOP, TAU, rgba, glow, circle, roundRect, text } from './render-util.ts';
+import { GW, GH, HUD_TOP, TAU, rgba, glow, circle, roundRect, text } from './render-util.ts';
 import type { Rect, View } from './render-util.ts';
 import { mazeCache } from './render-maze.ts';
 import { drawBen } from './render-ben.ts';
@@ -28,6 +28,22 @@ export function drawWorld(view: View, g: Game): void {
   ctx.save();
   ctx.translate(0, HUD_TOP);
   ctx.drawImage(cache.canvas, 0, 0, COLS, ROWS);
+
+  // In overdrive the walls throb in time with the music.
+  if (g.player.overdrive > 0 && (g.state === 'play' || g.state === 'intro')) {
+    const beat = (g.time * SECTORS[g.spec.sector].bpm) / 60;
+    const pulse = Math.pow(1 - (beat % 1), 3);
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, 0, COLS, ROWS);
+    ctx.clip();
+    ctx.strokeStyle = rgba('#8fb0ff', 0.15 + pulse * 0.55);
+    ctx.lineWidth = 0.12 + pulse * 0.18;
+    ctx.shadowColor = '#4a7bff';
+    ctx.shadowBlur = (0.4 + pulse) * view.layout.scale * view.layout.dpr;
+    ctx.stroke(cache.walls);
+    ctx.restore();
+  }
 
   // The maze flashes white when a level is cleared, as in Pac-Man.
   if (g.state === 'clear' && g.stateT < 2.2 && Math.floor(g.stateT * 5) % 2 === 1) {
@@ -167,6 +183,29 @@ export function drawWorld(view: View, g: Game): void {
 
   if (g.boss && !g.boss.dead) drawBoss(view, g, g.boss);
 
+  // The dot radar: after a while with no dot, an arrow points at the nearest.
+  if (g.radar >= 0 && g.state === 'play') {
+    const tx = g.radar % COLS;
+    const ty = (g.radar - tx) / COLS;
+    const a = Math.atan2(ty - p.y, tx - p.x);
+    const pulse = 0.6 + Math.sin(t * 8) * 0.4;
+    glow(ctx, tx, ty, 1.3, '#ffd23f', 0.4 + pulse * 0.4);
+    ctx.save();
+    ctx.translate(p.x + Math.cos(a) * (1.15 + pulse * 0.2), p.y + Math.sin(a) * (1.15 + pulse * 0.2));
+    ctx.rotate(a);
+    ctx.scale(1.5, 1.5);
+    glow(ctx, 0, 0, 0.6, '#ffd23f', 0.6);
+    ctx.fillStyle = '#ffd23f';
+    ctx.beginPath();
+    ctx.moveTo(0.32, 0);
+    ctx.lineTo(-0.16, -0.24);
+    ctx.lineTo(-0.04, 0);
+    ctx.lineTo(-0.16, 0.24);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+
   // Ben.
   if (g.state === 'dying') {
     // A squash and a slump, then he folds away as Pac-Man does.
@@ -224,7 +263,9 @@ export function drawWorld(view: View, g: Game): void {
     const a = Math.min(1, (q.life - q.t) / 0.4);
     const half = q.text.length * q.size * 0.3;
     const x = Math.min(Math.max(q.x, half - 0.3), COLS - 0.7 - half);
-    text(view, q.text, x, q.y, q.size * 0.6, q.color, { weight: 900, stroke: 'rgba(0,0,0,0.7)', alpha: a });
+    // Pops in big and settles.
+    const punch = 1 + 0.5 * Math.max(0, 1 - q.t / 0.16);
+    text(view, q.text, x, q.y, q.size * 0.6 * punch, q.color, { weight: 900, stroke: 'rgba(0,0,0,0.7)', alpha: a });
   }
 
   // READY!
@@ -398,6 +439,26 @@ export function render(view: View, g: Game): void {
     }
     ctx.restore();
   }
+  if (g.edgeFlash > 0) {
+    // The edges of the play area glow in the colour of what was just destroyed.
+    ctx.save();
+    const a = Math.min(0.55, g.edgeFlash * 0.6);
+    const edge = (x0: number, y0: number, x1: number, y1: number, x: number, y: number, w: number, h: number) => {
+      const grd = ctx.createLinearGradient(x0, y0, x1, y1);
+      grd.addColorStop(0, rgba(g.edgeColor, a));
+      grd.addColorStop(1, rgba(g.edgeColor, 0));
+      ctx.fillStyle = grd;
+      ctx.fillRect(x, y, w, h);
+    };
+    const top = HUD_TOP;
+    const bottom = HUD_TOP + ROWS;
+    edge(0, 0, 1.6, 0, 0, top, 1.6, ROWS);
+    edge(GW, 0, GW - 1.6, 0, GW - 1.6, top, 1.6, ROWS);
+    edge(0, top, 0, top + 1.6, 0, top, GW, 1.6);
+    edge(0, bottom, 0, bottom - 1.6, 0, bottom - 1.6, GW, 1.6);
+    ctx.restore();
+  }
+  drawIris(view, g);
   if (g.flash > 0) {
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -409,4 +470,38 @@ export function render(view: View, g: Game): void {
   ctx.setTransform(k, 0, 0, k, L.ox * L.dpr, L.oy * L.dpr);
   if (g.paused) drawPause(view, g);
   drawControls(view);
+}
+
+/** A neon iris closes on Ben when a level is cleared and opens on the next one. */
+function drawIris(view: View, g: Game): void {
+  let open: number;
+  if (g.state === 'clear' && g.stateT > 2.9) open = 1 - Math.min(1, (g.stateT - 2.9) / 0.8);
+  else if (g.state === 'intro' && !g.respawn && g.stateT < 0.7) open = g.stateT / 0.7;
+  else return;
+  const ctx = view.ctx;
+  const p = g.player;
+  const cx = p.x + 0.5;
+  const cy = p.y + 0.5 + HUD_TOP;
+  const r = Math.max(0, open * open * 34);
+  const color = SECTORS[g.spec.sector].wall;
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(-4, -4, GW + 8, GH + 8);
+  ctx.arc(cx, cy, r, 0, TAU, true);
+  ctx.fillStyle = '#03050d';
+  ctx.fill('evenodd');
+  if (r > 0.05) {
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 0.25;
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 0.8 * view.layout.scale * view.layout.dpr;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, TAU);
+    ctx.stroke();
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 0.07;
+    ctx.shadowBlur = 0;
+    ctx.stroke();
+  }
+  ctx.restore();
 }

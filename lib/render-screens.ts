@@ -46,7 +46,10 @@ export function drawIntro(view: View, g: Game): void {
     const flash = Math.floor(g.time * 4) % 2 === 0;
     text(view, '⚠ WARNING ⚠', 14, HUD_TOP + 10.9, 1.25, flash ? '#ff2a3d' : '#ffffff', { weight: 900, glow: '#ff2a3d' });
     text(view, 'BOSS APPROACHING', 14, HUD_TOP + 12.3, 0.55, '#ffb3bb', { weight: 700 });
-    text(view, spec.name, 14, HUD_TOP + 14.4, 1.7, spec.color, { weight: 900, glow: spec.color, maxWidth: 23 });
+    // The name card slams in from the side.
+    const k = Math.max(0, Math.min(1, (t - 0.45) / 0.4));
+    const ease = 1 + 2.2 * (k - 1) ** 3 + 1.2 * (k - 1) ** 2;
+    if (k > 0) text(view, spec.name, 14 - (1 - ease) * 26, HUD_TOP + 14.4, 1.7, spec.color, { weight: 900, glow: spec.color, maxWidth: 23 });
     text(view, spec.title, 14, HUD_TOP + 16.2, 0.6, '#ffffff', { weight: 700 });
     text(view, spec.intro.toUpperCase(), 14, HUD_TOP + 17.9, 0.45, '#9aa3c7', { weight: 600, maxWidth: 23 });
   } else {
