@@ -216,6 +216,7 @@ export function killRobot(g: Game, r: Robot, how: 'shot' | 'eaten' | 'boss'): vo
   if (how === 'boss') return;
   if (!r.minion && r.kind !== 'mini') {
     g.kills++;
+    g.run.kills++;
     // The factory takes a while to rebuild it.
     if (!g.boss) g.spawnT = Math.max(g.spawnT, g.spec.respawn);
   }

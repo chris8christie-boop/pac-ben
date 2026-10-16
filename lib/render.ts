@@ -7,10 +7,10 @@ import type { Rect, View } from './render-util.ts';
 import { mazeCache } from './render-maze.ts';
 import { drawBen } from './render-ben.ts';
 import { drawRobot, drawRobotEntity } from './render-robots.ts';
-import { drawBoss } from './render-bosses.ts';
+import { drawBoss, drawTaunt } from './render-bosses.ts';
 import { drawShot, drawLaser, drawPickup } from './render-fx.ts';
 import { drawHud } from './render-hud.ts';
-import { drawIntro, drawClear, drawPause, drawGameOver, drawVictory, drawTitle } from './render-screens.ts';
+import { drawIntro, drawClear, drawPause, drawGameOver, drawVictory, drawTitle, drawStory } from './render-screens.ts';
 import { ROBOT_SPECS, SECTORS } from './levels.ts';
 import { COLS, ROWS } from './maze.ts';
 import { waitingRobots } from './game.ts';
@@ -169,11 +169,14 @@ export function drawWorld(view: View, g: Game): void {
 
   // Ben.
   if (g.state === 'dying') {
-    const k = Math.max(0, Math.min(1, (g.stateT - 0.4) / 1.1));
-    if (g.stateT < 1.6) drawBen(ctx, p.x, p.y, 0, 0, { t, death: k });
-  } else if (g.state !== 'title') {
+    // A squash and a slump, then he folds away as Pac-Man does.
+    if (g.stateT < 0.45) drawBen(ctx, p.x, p.y, p.facing, 0.4, { t, squash: Math.min(1, g.stateT / 0.15) });
+    else if (g.stateT < 1.6) drawBen(ctx, p.x, p.y, 0, 0, { t, death: Math.min(1, (g.stateT - 0.45) / 1.05) });
+  } else if (g.state !== 'title' && g.state !== 'story') {
     const blink = p.invuln > 0 && Math.floor(t * 12) % 2 === 0;
-    if (!blink) drawBen(ctx, p.x, p.y, p.facing, p.mouth, { t, moving: p.moving, overdrive: p.overdrive, shield: p.shield, muzzle: p.muzzle });
+    // A hop of joy when the level is cleared.
+    const hop = g.state === 'clear' && g.stateT < 1.8 ? Math.abs(Math.sin(g.stateT * 7)) * 0.55 * (1 - g.stateT / 1.8) : 0;
+    if (!blink) drawBen(ctx, p.x, p.y - hop, hop ? 1 : p.facing, hop ? g.stateT * 14 : p.mouth, { t, moving: p.moving || hop > 0, overdrive: p.overdrive, shield: p.shield, muzzle: p.muzzle, idle: g.state === 'play' ? p.idleT : 0 });
   }
 
   for (const b of g.bullets) drawShot(ctx, b, t);
@@ -214,6 +217,8 @@ export function drawWorld(view: View, g: Game): void {
     }
   }
   ctx.restore();
+
+  drawTaunt(view, g);
 
   for (const q of g.popups) {
     const a = Math.min(1, (q.life - q.t) / 0.4);
@@ -349,7 +354,7 @@ export function render(view: View, g: Game): void {
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.globalAlpha = 1;
   ctx.globalCompositeOperation = 'source-over';
-  ctx.fillStyle = g.state === 'title' ? SECTORS[0].bg : sector.bg;
+  ctx.fillStyle = g.state === 'title' || g.state === 'story' ? SECTORS[0].bg : sector.bg;
   ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
 
   const shake = g.shake > 0 ? g.shake * 0.35 : 0;
@@ -361,6 +366,8 @@ export function render(view: View, g: Game): void {
   if (g.state === 'title') {
     drawTitle(view, g);
     drawHud(view, g);
+  } else if (g.state === 'story') {
+    drawStory(view, g);
   } else {
     drawWorld(view, g);
     drawHud(view, g);

@@ -1,8 +1,8 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import { damageBoss } from '../lib/bosses.ts';
-import { createGame, drainEvents, hitPlayer, loadLevel, NO_INPUT, robotsOut, runSnapshot, startRun, STEP, titleRows, update } from '../lib/game.ts';
-import { BOSS_ORDER, BOSS_SPECS, DIFFICULTIES, LEVEL_COUNT, levelSpec } from '../lib/levels.ts';
+import { continueRun, createGame, drainEvents, hitPlayer, loadLevel, NO_INPUT, robotsOut, runSnapshot, startRun, STEP, storyTyped, titleRows, update } from '../lib/game.ts';
+import { BOSS_ORDER, BOSS_SPECS, CREDITS_TIME, DIFFICULTIES, LEVEL_COUNT, STORY, levelSpec } from '../lib/levels.ts';
 import { DOWN, DX, DY, LEFT, RIGHT, UP, atCentre, canGo, tileIndex } from '../lib/maze.ts';
 import type { Controls, Game } from '../lib/types.ts';
 
@@ -113,7 +113,7 @@ test('levels get harder, and every fifth is a boss', () => {
 });
 
 test('the title starts a run at level 1 with the difficulty\'s lives', () => {
-  const g = createGame({ hiScore: 1234, unlocked: 0 }, 1);
+  const g = createGame({ hiScore: 1234, unlocked: 0, storySeen: true }, 1);
   assert.equal(g.state, 'title');
   run(g, 0.5);
   update(g, STEP, { ...NO_INPUT, start: true });
@@ -124,9 +124,9 @@ test('the title starts a run at level 1 with the difficulty\'s lives', () => {
 });
 
 test('sectors already reached can be chosen on the title screen', () => {
-  const g = createGame({ hiScore: 0, unlocked: 2, difficulty: 'hero' }, 1);
+  const g = createGame({ hiScore: 0, unlocked: 2, difficulty: 'hero', storySeen: true }, 1);
   run(g, 0.5);
-  assert.deepEqual(titleRows(g), ['new', 'difficulty', 'sector']);
+  assert.deepEqual(titleRows(g), ['new', 'difficulty', 'sector', 'story']);
   update(g, STEP, { ...NO_INPUT, down: true });
   update(g, STEP, { ...NO_INPUT, down: true });
   assert.equal(g.menuRow, 2);
@@ -142,7 +142,7 @@ test('sectors already reached can be chosen on the title screen', () => {
 });
 
 test('the difficulty picked on the title changes lives, speeds and boss health', () => {
-  const g = createGame({ hiScore: 0, unlocked: 5 }, 1);
+  const g = createGame({ hiScore: 0, unlocked: 5, storySeen: true }, 1);
   assert.equal(g.difficulty, 'rookie', 'first run defaults to Rookie');
   run(g, 0.5);
   update(g, STEP, { ...NO_INPUT, down: true });
@@ -175,7 +175,7 @@ test('the difficulty picked on the title changes lives, speeds and boss health',
 test('a run can be continued from its save, and finishing clears it', () => {
   const g = createGame({ hiScore: 0, unlocked: 5, run: { level: 7, score: 12345, lives: 2, difficulty: 'hero' } }, 1);
   run(g, 0.5);
-  assert.deepEqual(titleRows(g), ['continue', 'new', 'difficulty', 'sector']);
+  assert.deepEqual(titleRows(g), ['continue', 'new', 'difficulty', 'sector', 'story']);
   assert.equal(g.menuRow, 0);
   update(g, STEP, { ...NO_INPUT, start: true });
   assert.equal(g.state, 'intro');
@@ -183,13 +183,13 @@ test('a run can be continued from its save, and finishing clears it', () => {
   assert.equal(g.score, 12345);
   assert.equal(g.lives, 2);
   assert.equal(g.difficulty, 'hero');
-  assert.deepEqual(runSnapshot(g), { level: 7, score: 12345, lives: 2, difficulty: 'hero' });
+  assert.deepEqual(runSnapshot(g), { level: 7, score: 12345, lives: 2, difficulty: 'hero', stats: { kills: 0, dots: 0, time: 0 } });
   g.state = 'gameover';
   assert.equal(runSnapshot(g), null);
   // A broken save is ignored.
   const bad = createGame({ hiScore: 0, unlocked: 0, run: { level: 99, score: 1, lives: 0, difficulty: 'hero' } }, 1);
   assert.equal(bad.savedRun, null);
-  assert.deepEqual(titleRows(bad), ['new', 'difficulty']);
+  assert.deepEqual(titleRows(bad), ['new', 'difficulty', 'story']);
 });
 
 test('Ben moves along corridors, turns at junctions and eats dots', () => {
@@ -396,4 +396,88 @@ test('each boss changes phase as it is hurt, and the level clears when it is des
     assert.equal(g.state, 'clear');
     assert.equal(g.robots.length, 0, 'minions go with it');
   }
+});
+
+test('the first new game tells the story, then starts; later ones go straight in', () => {
+  const g = createGame({ hiScore: 0, unlocked: 0 }, 1);
+  run(g, 0.5);
+  update(g, STEP, { ...NO_INPUT, start: true });
+  assert.equal(g.state, 'story');
+  assert.equal(g.storyPanel, 0);
+  // Enter while typing shows the whole panel; Enter again moves on.
+  update(g, STEP, { ...NO_INPUT, start: true });
+  assert.ok(storyTyped(g) >= STORY[0].lines[0].length + STORY[0].lines[1].length);
+  update(g, STEP, { ...NO_INPUT, start: true });
+  assert.equal(g.storyPanel, 1);
+  for (let i = 0; i < 4; i++) update(g, STEP, { ...NO_INPUT, start: true });
+  assert.equal(g.state, 'intro');
+  assert.equal(g.level, 1);
+  assert.ok(g.storySeen);
+  // Next time, New Game goes straight to level 1; the story is a menu row.
+  const h = createGame({ hiScore: 0, unlocked: 0, storySeen: true }, 1);
+  run(h, 0.5);
+  update(h, STEP, { ...NO_INPUT, start: true });
+  assert.equal(h.state, 'intro');
+  // Watching it from the menu, Esc skips back to the title.
+  const k = createGame({ hiScore: 0, unlocked: 0, storySeen: true }, 1);
+  run(k, 0.5);
+  update(k, STEP, { ...NO_INPUT, menuRow: titleRows(k).indexOf('story') });
+  update(k, STEP, { ...NO_INPUT, start: true });
+  assert.equal(k.state, 'story');
+  update(k, STEP, { ...NO_INPUT, pause: true });
+  assert.equal(k.state, 'title');
+});
+
+test('bosses speak when they arrive, when badly hurt and when beaten', () => {
+  const g = playing(5);
+  assert.equal(g.taunt?.text, BOSS_SPECS.boltz.taunts[0]);
+  const b = g.boss!;
+  g.player.invuln = 99;
+  while (b.phase === 1) {
+    damageBoss(g, 1);
+    run(g, 0.05);
+  }
+  assert.equal(g.taunt?.text, BOSS_SPECS.boltz.taunts[1]);
+  run(g, 3);
+  while (b.dying === 0) {
+    if (!b.guarded) damageBoss(g, 1);
+    run(g, 0.05);
+  }
+  assert.equal(g.taunt?.text, BOSS_SPECS.boltz.taunts[2]);
+  for (const kind of BOSS_ORDER) assert.equal(BOSS_SPECS[kind].taunts.length, 3);
+});
+
+test('the run keeps totals for the credits, across a continue', () => {
+  const g = playing();
+  run(g, 2, { dir: LEFT });
+  assert.ok(g.run.dots > 0);
+  assert.ok(g.run.time > 1.9);
+  g.run.kills = 4;
+  const saved = runSnapshot(g)!;
+  const h = createGame({ hiScore: 0, unlocked: 0, storySeen: true, run: saved }, 2);
+  continueRun(h, h.savedRun!);
+  assert.deepEqual(h.run, saved.stats);
+});
+
+test('the ending rolls credits, which Enter skips, then returns to the title', () => {
+  const g = playing();
+  g.state = 'victory';
+  g.stateT = 0;
+  run(g, 1.2);
+  update(g, STEP, { ...NO_INPUT, start: true });
+  assert.equal(g.state, 'victory');
+  assert.ok(g.stateT >= CREDITS_TIME);
+  run(g, 0.7);
+  update(g, STEP, { ...NO_INPUT, start: true });
+  assert.equal(g.state, 'title');
+});
+
+test('Ben says LET\'S GO at the start of a level and YES when it is cleared', () => {
+  const g = playing();
+  assert.ok(g.popups.some((q) => q.text === "LET'S GO!"));
+  g.dots.fill(0);
+  g.dotsLeft = 0;
+  run(g, STEP * 2);
+  assert.equal(g.state, 'clear');
+  assert.ok(g.popups.some((q) => q.text === 'YES!'));
 });

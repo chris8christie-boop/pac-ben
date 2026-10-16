@@ -1,7 +1,9 @@
 /* The six bosses. */
-import { TAU, rgba, shade, glow, circle, roundRect } from './render-util.ts';
+import { TAU, rgba, shade, glow, circle, roundRect, text } from './render-util.ts';
 import type { View } from './render-util.ts';
 import { BOSS_SPECS } from './levels.ts';
+import type { BossKind } from './levels.ts';
+import { COLS } from './maze.ts';
 import type { Boss, Game } from './types.ts';
 
 /* ---------- bosses ---------- */
@@ -474,4 +476,76 @@ export function drawBoss(view: View, g: Game, b: Boss): void {
     ctx.fill();
     ctx.restore();
   }
+}
+
+/** A boss built only to be drawn: on the story screens and in the credits. */
+export function showBoss(g: Game, kind: BossKind, x = 0, y = 0): Boss {
+  const r = BOSS_SPECS[kind].radius;
+  const drones =
+    kind === 'hydra'
+      ? Array.from({ length: 4 }, (_, i) => {
+          const angle = g.time * 1.1 + (i / 4) * TAU;
+          return { angle, x: x + Math.cos(angle) * 2.9, y: y + Math.sin(angle) * 2.9, hp: 5, flash: 0, fireCd: 9, alive: true };
+        })
+      : [];
+  return {
+    kind, x, y, vx: 0, vy: 0, r, hp: 1, maxHp: 1, phase: 1, mode: 'show', modeT: 0, t: g.time, angle: g.time * 1.4, spin: 1,
+    flash: 0, alpha: 1, dying: 0, dead: false, aim: 0, counter: 0, dashLeft: 0, dashDist: 0, trailT: 0, spiral: 0, fireT: 0,
+    target: { x, y }, home: { x, y }, drones, clones: [], guarded: false,
+  };
+}
+
+/** Draws a boss at (x, y), scaled. */
+export function drawShowBoss(view: View, g: Game, kind: BossKind, x: number, y: number, scale: number, alpha = 1): void {
+  const ctx = view.ctx;
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.scale(scale, scale);
+  ctx.globalAlpha *= alpha;
+  drawBoss(view, g, showBoss(g, kind));
+  ctx.restore();
+}
+
+/** The boss's speech bubble. */
+export function drawTaunt(view: View, g: Game): void {
+  const b = g.boss;
+  const say = g.taunt;
+  if (!b || !say || b.dead) return;
+  const ctx = view.ctx;
+  const color = BOSS_SPECS[b.kind].color;
+  const size = 0.46;
+  const w = Math.min(26.5, say.text.length * size * 0.78 + 1.6);
+  const h = 1.35;
+  const pop = Math.min(1, say.t * 7);
+  const fade = Math.max(0, Math.min(1, (say.life - say.t) * 3));
+  const bx = Math.max(w / 2 - 0.4, Math.min(COLS - 0.6 - w / 2, b.x));
+  let by = b.y - b.r - 1.6;
+  const below = by - h / 2 < -0.3;
+  if (below) by = b.y + b.r + 1.6;
+  ctx.save();
+  ctx.globalAlpha *= fade;
+  ctx.translate(bx, by);
+  const k = 0.5 + 0.5 * pop + Math.sin(Math.min(1, say.t * 4) * Math.PI) * 0.08;
+  ctx.scale(k, k);
+  // Tail towards the boss.
+  const tx = Math.max(-w / 2 + 0.7, Math.min(w / 2 - 0.7, b.x - bx));
+  const edge = below ? -h / 2 : h / 2;
+  ctx.fillStyle = '#ffffff';
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 0.1;
+  ctx.beginPath();
+  ctx.moveTo(tx - 0.35, edge);
+  ctx.lineTo(tx, edge + (below ? -0.7 : 0.7));
+  ctx.lineTo(tx + 0.35, edge);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  glow(ctx, 0, 0, w * 0.55, color, 0.25);
+  roundRect(ctx, -w / 2, -h / 2, w, h, 0.5);
+  ctx.fill();
+  ctx.stroke();
+  // Cover the tail's join so the bubble reads as one shape.
+  ctx.fillRect(tx - 0.3, below ? -h / 2 - 0.02 : h / 2 - 0.1, 0.6, 0.12);
+  text(view, say.text, 0, 0.04, size, '#10131f', { weight: 900, maxWidth: w - 0.8 });
+  ctx.restore();
 }

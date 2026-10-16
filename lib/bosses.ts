@@ -8,7 +8,7 @@ import type { RobotKind } from './levels.ts';
 import { COLS, PATH, ROWS, nearestWalkable, tileAt } from './maze.ts';
 import type { Point } from './maze.ts';
 import { killRobot } from './robots.ts';
-import { TAU, addScore, angleTo, burst, clamp, dist, emit, enemyBullet, makeRobot, particle, popup, ring } from './world.ts';
+import { TAU, addScore, angleTo, bossSays, burst, clamp, dist, emit, enemyBullet, makeRobot, particle, popup, ring } from './world.ts';
 import type { Boss, Bullet, Game, Laser } from './types.ts';
 
 const PHASE_LINES: Record<string, string[]> = {
@@ -783,11 +783,13 @@ export function damageBoss(g: Game, amount: number): void {
     const spec = BOSS_SPECS[b.kind];
     addScore(g, spec.points, b.x, b.y - b.r - 0.5, spec.color);
     emit(g, 'bossdie', b.x, b.y);
+    bossSays(g, 2);
     g.shake = 0.8;
     return;
   }
   const phase = phaseFor(b);
   if (phase > b.phase) {
+    if (b.phase === 1) bossSays(g, 1);
     b.phase = phase;
     clearEnemyFire(g);
     g.flash = 0.35;

@@ -2,31 +2,33 @@
  * The game: state, rules and the update step. No drawing and no browser APIs,
  * so it runs the same in tests as in the page.
  */
-import { BOSS_SPECS, DIFFICULTIES, DIFFICULTY_ORDER, LEVEL_COUNT, ROBOT_SPECS, SECTORS, firstLevelOf, levelSpec } from './levels.ts';
+import { BOSS_SPECS, CREDITS_TIME, DIFFICULTIES, DIFFICULTY_ORDER, LEVEL_COUNT, ROBOT_SPECS, SECTORS, STORY, STORY_TYPE_SPEED, firstLevelOf, levelSpec } from './levels.ts';
 import type { Difficulty, LevelSpec, RobotKind } from './levels.ts';
 import { COLS, DX, LEFT, NONE, PATH, RIGHT, advance, atCentre, canGo, distanceMap, generateMaze, opposite, tileAt, tileIndex } from './maze.ts';
 import type { Mover } from './maze.ts';
 import { mulberry32, pickWeighted } from './rng.ts';
 import { bossSolid, bossTakesShot, createBoss, resetBoss, updateBoss } from './bosses.ts';
 import { damageRobot, killRobot, reverseAll, solid, updateRobots } from './robots.ts';
-import { TAU, addScore, angleTo, burst, clamp, dist, emit, inBounds, makeRobot, particle, popup } from './world.ts';
-import type { Bullet, Controls, Game, GameEvent, Laser, Pickup, Player, PowerKind, SavedRun } from './types.ts';
+import { TAU, addScore, angleTo, bossSays, burst, clamp, dist, emit, inBounds, makeRobot, particle, popup } from './world.ts';
+import type { Bullet, Controls, Game, GameEvent, Laser, Pickup, Player, PowerKind, RunStats, SavedRun } from './types.ts';
 
 export interface SaveData {
   hiScore: number;
   unlocked: number;
   difficulty?: Difficulty;
   run?: SavedRun | null;
+  storySeen?: boolean;
 }
 
 /** The rows of the title menu, top to bottom. */
-export type MenuRow = 'continue' | 'new' | 'difficulty' | 'sector';
+export type MenuRow = 'continue' | 'new' | 'difficulty' | 'sector' | 'story';
 
 export function titleRows(g: Game): MenuRow[] {
   const rows: MenuRow[] = [];
   if (g.savedRun) rows.push('continue');
   rows.push('new', 'difficulty');
   if (g.unlocked > 0) rows.push('sector');
+  rows.push('story');
   return rows;
 }
 
@@ -36,8 +38,12 @@ function isDifficulty(d: unknown): d is Difficulty {
 
 function validRun(r: SavedRun | null | undefined): SavedRun | null {
   if (!r || !Number.isFinite(r.level) || r.level < 1 || r.level > LEVEL_COUNT || !(r.lives >= 1) || !isDifficulty(r.difficulty)) return null;
-  return { level: Math.round(r.level), score: Math.max(0, Math.floor(r.score) || 0), lives: Math.floor(r.lives), difficulty: r.difficulty };
+  const s = r.stats;
+  const stats = s ? { kills: Math.max(0, Math.floor(s.kills) || 0), dots: Math.max(0, Math.floor(s.dots) || 0), time: Math.max(0, Number(s.time) || 0) } : undefined;
+  return { level: Math.round(r.level), score: Math.max(0, Math.floor(r.score) || 0), lives: Math.floor(r.lives), difficulty: r.difficulty, stats };
 }
+
+const freshStats = (): RunStats => ({ kills: 0, dots: 0, time: 0 });
 
 export const STEP = 1 / 120;
 
@@ -83,6 +89,7 @@ function makePlayer(x: number, y: number): Player {
     mouth: 0,
     moving: false,
     muzzle: 0,
+    idleT: 0,
   };
 }
 
@@ -108,6 +115,11 @@ export function createGame(save: SaveData, seed = Date.now()): Game {
     menuRow: 0,
     difficulty,
     savedRun: validRun(save.run),
+    storySeen: !!save.storySeen,
+    storyPanel: 0,
+    storyThen: null,
+    run: freshStats(),
+    taunt: null,
     player: makePlayer(maze.playerStart.x, maze.playerStart.y),
     robots: [],
     queue: [],
@@ -161,6 +173,7 @@ export function drainEvents(g: Game): GameEvent[] {
 /** Starts a new run at the first level of a sector. */
 export function startRun(g: Game, sector: number, difficulty: Difficulty = g.difficulty): void {
   g.difficulty = difficulty;
+  g.run = freshStats();
   g.score = 0;
   g.lives = DIFFICULTIES[difficulty].lives;
   g.nextLife = 10000;
@@ -172,6 +185,7 @@ export function startRun(g: Game, sector: number, difficulty: Difficulty = g.dif
 /** Picks up a saved run where it left off. */
 export function continueRun(g: Game, run: SavedRun): void {
   g.difficulty = run.difficulty;
+  g.run = run.stats ? { ...run.stats } : freshStats();
   g.score = run.score;
   g.lives = run.lives;
   g.nextLife = 10000;
@@ -184,8 +198,57 @@ export function continueRun(g: Game, run: SavedRun): void {
 /** What CONTINUE would need to pick this run up again, or null when there's nothing to save. */
 export function runSnapshot(g: Game): SavedRun | null {
   if (g.state === 'title' || g.state === 'gameover' || g.state === 'victory' || g.lives <= 0) return null;
-  return { level: g.level, score: g.score, lives: g.lives, difficulty: g.difficulty };
+  return { level: g.level, score: g.score, lives: g.lives, difficulty: g.difficulty, stats: { ...g.run } };
 }
+
+/** Shows the opening story, then starts `then` (or goes back to the title). */
+export function beginStory(g: Game, then: { sector: number; difficulty: Difficulty } | null): void {
+  g.state = 'story';
+  g.stateT = 0;
+  g.storyPanel = 0;
+  g.storyThen = then;
+  emit(g, 'story');
+}
+
+function endStory(g: Game): void {
+  g.storySeen = true;
+  const then = g.storyThen;
+  g.storyThen = null;
+  if (then) startRun(g, then.sector, then.difficulty);
+  else toTitle(g);
+}
+
+/** How many letters of the current story panel have typed out. */
+export function storyTyped(g: Game): number {
+  return Math.floor(g.stateT * STORY_TYPE_SPEED);
+}
+
+function storyLength(panel: number): number {
+  const p = STORY[panel];
+  return p ? p.lines[0].length + p.lines[1].length : 0;
+}
+
+function storyStep(g: Game, dt: number, c: Controls): void {
+  const total = storyLength(g.storyPanel);
+  const before = Math.floor((g.stateT - dt) * STORY_TYPE_SPEED);
+  const now = storyTyped(g);
+  if (now > before && now <= total && now % 2 === 0) emit(g, 'type');
+  if (c.back || c.pause) {
+    endStory(g);
+    return;
+  }
+  if (!c.start) return;
+  if (now < total) {
+    g.stateT = total / STORY_TYPE_SPEED + 0.01;
+    return;
+  }
+  g.storyPanel++;
+  g.stateT = 0;
+  emit(g, 'menu');
+  if (g.storyPanel >= STORY.length) endStory(g);
+}
+
+
 
 /** The first robots out are the classic four, with any new kind brought in early; then the level's mix. */
 function nextKind(g: Game): RobotKind {
@@ -265,6 +328,8 @@ export function toTitle(g: Game): void {
 }
 
 export function update(g: Game, dt: number, c: Controls): void {
+  // Omega's last moments play out in slow motion.
+  if (g.boss && g.boss.kind === 'omega' && g.boss.dying > 0 && !g.boss.dead) dt *= 0.45;
   g.time += dt;
   if (g.events.length > 400) g.events.splice(0, 200);
   if (g.paused) {
@@ -280,6 +345,9 @@ export function update(g: Game, dt: number, c: Controls): void {
     case 'title':
       titleMenu(g, c);
       break;
+    case 'story':
+      storyStep(g, dt, c);
+      break;
     case 'intro':
       if (c.pause) {
         g.paused = true;
@@ -292,6 +360,10 @@ export function update(g: Game, dt: number, c: Controls): void {
         g.state = 'play';
         g.stateT = 0;
         emit(g, 'go');
+        if (!g.respawn) {
+          popup(g, g.player.x, g.player.y - 1.1, "LET'S GO!", '#ffd23f', 1);
+          if (g.boss) bossSays(g, 0);
+        }
       }
       break;
     case 'play':
@@ -315,8 +387,13 @@ export function update(g: Game, dt: number, c: Controls): void {
       }
       break;
     case 'gameover':
-    case 'victory':
       if (g.stateT > 1.5 && c.start) toTitle(g);
+      break;
+    case 'victory':
+      // The credits roll; Enter skips to the end, then returns to the title.
+      if (!c.start || g.stateT < 1) break;
+      if (g.stateT < CREDITS_TIME) g.stateT = CREDITS_TIME;
+      else if (g.stateT > CREDITS_TIME + 0.6) toTitle(g);
       break;
   }
 }
@@ -353,11 +430,14 @@ function titleMenu(g: Game, c: Controls): void {
   }
   if (!c.start || g.stateT < 0.3) return;
   if (row === 'continue' && g.savedRun) continueRun(g, g.savedRun);
-  else if (row === 'new' || row === 'difficulty' || row === 'sector') startRun(g, g.menuSector, g.difficulty);
+  else if (row === 'story') beginStory(g, null);
+  else if (!g.storySeen) beginStory(g, { sector: g.menuSector, difficulty: g.difficulty });
+  else startRun(g, g.menuSector, g.difficulty);
 }
 
 function tick(g: Game, dt: number, c: Controls): void {
   g.levelT += dt;
+  g.run.time += dt;
   if (!g.boss) updateModes(g, dt);
   updatePlayer(g, dt, c);
   updateDistances(g);
@@ -433,6 +513,7 @@ function updatePlayer(g: Game, dt: number, c: Controls): void {
     burst(g, p.x, p.y, '#b48cff', 10, 5, 0.7);
   }
   p.moving = p.dir >= 0;
+  p.idleT = p.moving ? 0 : p.idleT + dt;
   if (p.dir >= 0) p.facing = p.dir;
   else if (p.desired >= 0) p.facing = p.desired;
   if (p.moving) p.mouth += dt * 14;
@@ -447,6 +528,7 @@ function updatePlayer(g: Game, dt: number, c: Controls): void {
       g.dots[i] = 0;
       g.dotsLeft--;
       g.dotsEaten++;
+      g.run.dots++;
       if (dot === 1) {
         addScore(g, 10);
         emit(g, 'dot', tx, ty);
@@ -852,6 +934,7 @@ function checkClear(g: Game): void {
 function clearLevel(g: Game): void {
   g.state = 'clear';
   g.stateT = 0;
+  popup(g, g.player.x, g.player.y - 1.1, 'YES!', '#7dff8a', 1.1);
   // The robots still out vanish, as Pac-Man's ghosts do.
   for (const r of g.robots) if (r.alive) killRobot(g, r, 'boss');
   g.robots = [];
@@ -894,6 +977,10 @@ function updateFx(g: Game, dt: number): void {
   g.shake = Math.max(0, g.shake - dt * 2.2);
   g.flash = Math.max(0, g.flash - dt * 1.6);
   g.glitch = Math.max(0, g.glitch - dt);
+  if (g.taunt) {
+    g.taunt.t += dt;
+    if (g.taunt.t > g.taunt.life) g.taunt = null;
+  }
   if (g.banner) {
     g.banner.t += dt;
     if (g.banner.t > g.banner.life) g.banner = null;
