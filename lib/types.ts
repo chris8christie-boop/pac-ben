@@ -245,9 +245,14 @@ export interface Game {
   hiScore: number;
   lives: number;
   nextLife: number;
-  /** Highest sector reached (0-5), so a run can start there. */
-  unlocked: number;
-  menuSector: number;
+  /** Highest level reached (1-30), so a run can start at any level up to it. */
+  reached: number;
+  /** The level a new game starts at, picked on the title. */
+  menuLevel: number;
+  /** The score when this level began: the lifesaver puts it back. */
+  levelScore: number;
+  /** The game over menu: 0 tries the level again, 1 goes to the title. */
+  overRow: number;
   /** The title menu: which row is lit, and the difficulty picked for a new game. */
   menuRow: number;
   difficulty: Difficulty;
@@ -256,7 +261,7 @@ export interface Game {
   /** The opening story: whether it has been seen, which panel is showing, and the run to start after it. */
   storySeen: boolean;
   storyPanel: number;
-  storyThen: { sector: number; difficulty: Difficulty } | null;
+  storyThen: { level: number; difficulty: Difficulty } | null;
   run: RunStats;
   /** A boss's speech bubble. */
   taunt: { text: string; t: number; life: number } | null;
