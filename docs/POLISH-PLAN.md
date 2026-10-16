@@ -1,6 +1,6 @@
 # Pac Ben: the polish plan
 
-The goal: turn a working game into one a kid wants to come back to every day. This plan is written so that any Claude session (or person) can build it phase by phase in `pacben/`. Read `pacben/README.md` first for how the game is put together.
+The goal: turn a working game into one a kid wants to come back to every day. This plan is written so that any Claude session (or person) can build it phase by phase. The game is the whole of the `chris8christie-boop/pac-ben` repository; paths below are relative to its root. Read `README.md` first for how the game is put together.
 
 ## Where the game stands (review, 16 Oct 2026)
 
@@ -20,8 +20,8 @@ What holds it back:
 
 ## Rules for whoever builds this
 
-1. Work only in `pacben/`. Never touch `tyme/`, `src/` or anything at the repository root.
-2. Before any change: `cd pacben && pnpm install --frozen-lockfile`. After every task: `pnpm typecheck && pnpm test && pnpm standalone`. All 20 tests must pass before a commit (after task 0.1).
+1. Work on a branch and merge to `main` when a phase is done: every push to `main` is tested and published to https://chris8christie-boop.github.io/pac-ben/ by `.github/workflows/publish.yml`.
+2. Before any change: `pnpm install --frozen-lockfile`. After every task: `pnpm typecheck && pnpm test && pnpm standalone`. All 20 tests must pass before a commit (after task 0.1).
 3. Keep `lib/` **flat** and use only `import { x } from './name.ts'` and `export function` / `export const` / `export class`. `scripts/build-standalone.mjs` is a tiny bundler and understands nothing else. No new runtime npm packages.
 4. Game rules (`game.ts`, `robots.ts`, `bosses.ts`, `maze.ts`, `levels.ts`) must stay free of browser APIs so tests keep running in Node. Drawing goes in `render*.ts`, sound in `audio.ts`, browser glue in `main.ts`/`input.ts`.
 5. Every new rule gets a test in `tests/`. Every new screen gets looked at: open `standalone/pacben.html?level=N` in a browser (or a headless Chromium screenshot) before calling it done.
@@ -90,7 +90,7 @@ What holds it back:
 
 ## Phase 6: ship
 
-**6.1 Hosting.** Public GitHub repository `pac-ben` with a GitHub Actions workflow that runs `pnpm standalone` on every push and publishes `standalone/` to GitHub Pages as `index.html`. The README's first line is the play link.
+**6.1 Hosting.** ✅ Done (repository and workflow; Pages switched on in the repository settings). Public GitHub repository `pac-ben` with a GitHub Actions workflow that runs `pnpm standalone` on every push and publishes `standalone/` to GitHub Pages as `index.html`. The README's first line is the play link.
 
 **6.2 Version.** `v1.x` in the title screen corner from `package.json`; a `CHANGELOG.md` with a line per phase.
 
