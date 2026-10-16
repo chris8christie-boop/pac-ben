@@ -9,6 +9,22 @@ export const LEVELS_PER_SECTOR = 5;
 /** Shown in the ending credits and on the title screen. */
 export const CREDITS = 'MADE FOR BEN BY DAD';
 
+/** The opening story: three panels, each a scene and two lines that type out. */
+export type StoryScene = 'city' | 'mazes' | 'hero';
+
+export const STORY: readonly { scene: StoryScene; lines: [string, string] }[] = [
+  { scene: 'city', lines: ['NEON CITY RAN ON GOOD ROBOTS...', '...UNTIL OMEGA TOOK THEIR MINDS.'] },
+  { scene: 'mazes', lines: ['THIRTY MAZES STAND BETWEEN OMEGA', "AND THE CITY'S LAST POWER CORE."] },
+  { scene: 'hero', lines: ['ONLY ONE HERO IS FAST ENOUGH.', 'HIS NAME IS BEN.'] },
+];
+
+/** Letters per second as the story types out. */
+export const STORY_TYPE_SPEED = 26;
+
+/** How long the ending runs: the maze fading, then the credits rolling. */
+export const CREDITS_FADE = 2.6;
+export const CREDITS_TIME = 44;
+
 export type Difficulty = 'rookie' | 'hero' | 'legend';
 
 export interface DifficultySpec {
@@ -80,15 +96,17 @@ export interface BossSpec {
   points: number;
   /** One line shown on the warning screen. */
   intro: string;
+  /** What it says when it arrives, when it's badly hurt, and when it's beaten. */
+  taunts: [string, string, string];
 }
 
 export const BOSS_SPECS: Record<BossKind, BossSpec> = {
-  boltz: { name: 'BOLTZ', title: 'THE BIG BOLT', color: '#ffd23f', hp: 45, radius: 1.5, points: 5000, intro: 'Rings of sparks. Keep moving.' },
-  magnetron: { name: 'MAGNETRON', title: 'THE WARPING MAGNET', color: '#c04dff', hp: 70, radius: 1.5, points: 10000, intro: 'Watch where it warps to.' },
-  shredder: { name: 'SHREDDER', title: 'THE SPINNING SAW', color: '#ff7a1a', hp: 100, radius: 1.45, points: 15000, intro: 'Get out of its line.' },
-  hydra: { name: 'HYDRA-CORE', title: 'THE SHIELDED HEART', color: '#34f5a0', hp: 120, radius: 1.6, points: 20000, intro: 'Break the shield drones first.' },
-  glitch: { name: 'GLITCH KING', title: 'THE CORRUPTED CROWN', color: '#3ff5ff', hp: 150, radius: 1.5, points: 30000, intro: 'Only one of them is real.' },
-  omega: { name: 'OMEGA', title: 'THE OVERMIND', color: '#ff3355', hp: 240, radius: 2, points: 50000, intro: 'Everything you have faced, at once.' },
+  boltz: { name: 'BOLTZ', title: 'THE BIG BOLT', color: '#ffd23f', hp: 45, radius: 1.5, points: 5000, intro: 'Rings of sparks. Keep moving.', taunts: ["YOU CAN'T OUTRUN LIGHTNING, BEN!", "BZZT! NOW I'M REALLY CHARGED!", 'SHORT... CIRCUIT...!'] },
+  magnetron: { name: 'MAGNETRON', title: 'THE WARPING MAGNET', color: '#c04dff', hp: 70, radius: 1.5, points: 10000, intro: 'Watch where it warps to.', taunts: ["YOU'LL BE DRAWN TO ME, BEN!", 'NOW YOU SEE ME... NOW YOU DON\'T!', 'MY POLES... ARE FLIPPING...!'] },
+  shredder: { name: 'SHREDDER', title: 'THE SPINNING SAW', color: '#ff7a1a', hp: 100, radius: 1.45, points: 15000, intro: 'Get out of its line.', taunts: ["I'LL SLICE THIS MAZE IN HALF!", 'SPIN FASTER! FASTER!!', 'TOO... DIZZY...!'] },
+  hydra: { name: 'HYDRA-CORE', title: 'THE SHIELDED HEART', color: '#34f5a0', hp: 120, radius: 1.6, points: 20000, intro: 'Break the shield drones first.', taunts: ['MY SHIELDS NEVER FAIL!', 'BREAK ONE, TWO MORE APPEAR!', 'MY HEART... IS BROKEN!'] },
+  glitch: { name: 'GLITCH KING', title: 'THE CORRUPTED CROWN', color: '#3ff5ff', hp: 150, radius: 1.5, points: 30000, intro: 'Only one of them is real.', taunts: ['WHICH ONE OF ME IS REAL?', 'ERR0R! ERR0R! Y0U WILL L0SE!', 'SYSTEM... SHUTTING... D0WN...'] },
+  omega: { name: 'OMEGA', title: 'THE OVERMIND', color: '#ff3355', hp: 240, radius: 2, points: 50000, intro: 'Everything you have faced, at once.', taunts: ['SO YOU ARE THE ONE THEY CALL BEN.', 'IMPOSSIBLE! NO ONE GETS THIS FAR!', 'THE CITY... IS... YOURS...'] },
 };
 
 export const BOSS_ORDER: readonly BossKind[] = ['boltz', 'magnetron', 'shredder', 'hydra', 'glitch', 'omega'];

@@ -40,13 +40,13 @@ What holds it back:
 
 ## Phase 1: make it Ben's game
 
-**1.1 Opening story.** Three panels, each a short line of text over a simple drawn scene (reuse `drawRobot`, `drawBen`, boss drawings): *"Neon City ran on good robots... until OMEGA took their minds."* / *"Thirty mazes stand between Omega and the city's last power core."* / *"Only one hero is fast enough. His name is BEN."* Enter/tap advances; skippable; plays on first New Game; **STORY** option on the title afterwards.
+**1.1 Opening story.** ✅ Done. Three panels, each a short line of text over a simple drawn scene (reuse `drawRobot`, `drawBen`, boss drawings): *"Neon City ran on good robots... until OMEGA took their minds."* / *"Thirty mazes stand between Omega and the city's last power core."* / *"Only one hero is fast enough. His name is BEN."* Enter/tap advances; skippable; plays on first New Game; **STORY** option on the title afterwards.
 
-**1.2 Boss taunts.** Each boss gets three lines (arrive, halfway, defeated) shown in a speech bubble above it for ~2 s (`lib/levels.ts` holds the lines; `render-bosses.ts` draws the bubble). Examples: Boltz, "YOU CAN'T OUTRUN LIGHTNING, BEN!"; Glitch King, "WHICH ONE OF ME IS REAL?"; Omega, "SO YOU ARE THE ONE THEY CALL BEN."
+**1.2 Boss taunts.** ✅ Done. Each boss gets three lines (arrive, halfway, defeated) shown in a speech bubble above it for ~2 s (`lib/levels.ts` holds the lines; `render-bosses.ts` draws the bubble). Examples: Boltz, "YOU CAN'T OUTRUN LIGHTNING, BEN!"; Glitch King, "WHICH ONE OF ME IS REAL?"; Omega, "SO YOU ARE THE ONE THEY CALL BEN."
 
-**1.3 Ending.** After Omega: a slow-motion final explosion, the maze walls go white and fade, then a credits scroll: *STARRING BEN · THE ROBOTS · THE BOSSES (each drawn, named) · MADE FOR BEN* with the run's stats (robots destroyed, dots eaten, time, score). Enter/tap returns to the title. The credit line is configurable in `lib/levels.ts` (`CREDITS`).
+**1.3 Ending.** ✅ Done. After Omega: a slow-motion final explosion, the maze walls go white and fade, then a credits scroll: *STARRING BEN · THE ROBOTS · THE BOSSES (each drawn, named) · MADE FOR BEN* with the run's stats (robots destroyed, dots eaten, time, score). Enter/tap returns to the title. The credit line is configurable in `lib/levels.ts` (`CREDITS`).
 
-**1.4 Ben has a personality.** Idle animation (looks left and right, headband flutters); a "LET'S GO!" popup at level start; a hop and "YES!" on level clear; a slump on death. All in `render-ben.ts` driven by `g.state`.
+**1.4 Ben has a personality.** ✅ Done. Idle animation (looks left and right, headband flutters); a "LET'S GO!" popup at level start; a hop and "YES!" on level clear; a slump on death. All in `render-ben.ts` driven by `g.state`.
 
 ## Phase 2: feel
 

@@ -43,6 +43,7 @@ export interface Layout {
 export const UI = {
   resume: { x: 7, y: 16.6, w: 14, h: 2.4 },
   quit: { x: 7, y: 19.8, w: 14, h: 2.4 },
+  skip: { x: 20.5, y: 0.6, w: 6.8, h: 1.8 },
 };
 
 export function computeLayout(cssW: number, cssH: number, dpr: number, touch: boolean): Layout {

@@ -2,7 +2,7 @@ import type { BossKind, Difficulty, LevelSpec, RobotKind } from './levels.ts';
 import type { Maze, Mover, Point } from './maze.ts';
 import type { Rng } from './rng.ts';
 
-export type GameState = 'title' | 'intro' | 'play' | 'dying' | 'clear' | 'gameover' | 'victory';
+export type GameState = 'title' | 'story' | 'intro' | 'play' | 'dying' | 'clear' | 'gameover' | 'victory';
 
 export type PowerKind = 'rapid' | 'pierce' | 'seeker' | 'shield' | 'emp' | 'life';
 
@@ -28,6 +28,14 @@ export interface SavedRun {
   score: number;
   lives: number;
   difficulty: Difficulty;
+  stats?: RunStats;
+}
+
+/** Totals for the whole run, shown in the ending credits. */
+export interface RunStats {
+  kills: number;
+  dots: number;
+  time: number;
 }
 
 export interface Player extends Mover {
@@ -44,6 +52,8 @@ export interface Player extends Mover {
   mouth: number;
   moving: boolean;
   muzzle: number;
+  /** Seconds standing still, for the idle animation. */
+  idleT: number;
 }
 
 export interface Robot extends Mover {
@@ -241,6 +251,13 @@ export interface Game {
   difficulty: Difficulty;
   /** The run that CONTINUE would resume, if any. */
   savedRun: SavedRun | null;
+  /** The opening story: whether it has been seen, which panel is showing, and the run to start after it. */
+  storySeen: boolean;
+  storyPanel: number;
+  storyThen: { sector: number; difficulty: Difficulty } | null;
+  run: RunStats;
+  /** A boss's speech bubble. */
+  taunt: { text: string; t: number; life: number } | null;
   player: Player;
   robots: Robot[];
   /** The next robots out of the factory. Refilled as it empties: robots never run out. */

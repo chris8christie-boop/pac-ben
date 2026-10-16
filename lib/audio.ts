@@ -280,6 +280,13 @@ export function createSound(startMuted: boolean): Sound {
       case 'menu':
         tone(880, 0.05, { vol: 0.04 });
         break;
+      case 'type':
+        tone(1200 + Math.random() * 300, 0.025, { type: 'square', vol: 0.02 });
+        break;
+      case 'taunt':
+        // A robot voice: a burst of gruff blips.
+        for (let i = 0; i < 7; i++) tone(110 + Math.random() * 90, 0.07, { type: 'sawtooth', vol: 0.05, delay: i * 0.08 });
+        break;
       case 'start':
         arp([60, 67, 72, 79], 0.06, { vol: 0.05 });
         break;

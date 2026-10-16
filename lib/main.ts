@@ -37,6 +37,7 @@ interface Saved {
   muted: boolean;
   difficulty?: Difficulty;
   run?: SavedRun | null;
+  storySeen?: boolean;
 }
 
 function load(): Saved {
@@ -44,7 +45,7 @@ function load(): Saved {
     const raw = window.localStorage.getItem(SAVE_KEY);
     if (raw) {
       const s = JSON.parse(raw) as Partial<Saved>;
-      return { hiScore: Number(s.hiScore) || 0, unlocked: Number(s.unlocked) || 0, muted: !!s.muted, difficulty: s.difficulty, run: s.run ?? null };
+      return { hiScore: Number(s.hiScore) || 0, unlocked: Number(s.unlocked) || 0, muted: !!s.muted, difficulty: s.difficulty, run: s.run ?? null, storySeen: !!s.storySeen };
     }
   } catch {
     // Private windows and blocked storage: play without saving.
@@ -66,6 +67,8 @@ function musicFor(g: Game): string | null {
   if (g.paused) return null;
   switch (g.state) {
     case 'title':
+    case 'story':
+    case 'victory':
       return 'title';
     case 'intro':
     case 'play':
@@ -95,7 +98,7 @@ export function startPacBen(host: HTMLElement, options: PacBenOptions = {}): () 
   const ctx = canvas.getContext('2d', { alpha: false })!;
 
   const saved = load();
-  const g = createGame({ hiScore: saved.hiScore, unlocked: saved.unlocked, difficulty: saved.difficulty, run: saved.run });
+  const g = createGame({ hiScore: saved.hiScore, unlocked: saved.unlocked, difficulty: saved.difficulty, run: saved.run, storySeen: saved.storySeen });
   const sound = createSound(saved.muted);
   const resume = options.resume;
   if (resume && resume.level >= 1 && resume.lives > 0) {
@@ -141,9 +144,9 @@ export function startPacBen(host: HTMLElement, options: PacBenOptions = {}): () 
   function save(): void {
     const run = runSnapshot(g) ?? g.savedRun;
     lastRunKey = run ? `${run.level}/${run.lives}` : '';
-    store({ hiScore: g.hiScore, unlocked: g.unlocked, muted: sound.isMuted(), difficulty: g.difficulty, run });
+    store({ hiScore: g.hiScore, unlocked: g.unlocked, muted: sound.isMuted(), difficulty: g.difficulty, run, storySeen: g.storySeen });
   }
-  let lastSaved = { hi: g.hiScore, unlocked: g.unlocked, muted: saved.muted, difficulty: g.difficulty };
+  let lastSaved = { hi: g.hiScore, unlocked: g.unlocked, muted: saved.muted, difficulty: g.difficulty, story: g.storySeen };
 
   function handleTaps(): void {
     for (const tap of input.taps()) {
@@ -181,6 +184,10 @@ export function startPacBen(host: HTMLElement, options: PacBenOptions = {}): () 
           else if (hit === g.menuRow || !picker) pending.start = true;
           break;
         }
+        case 'story':
+          if (inRect(gx, gy, UI.skip)) pending.back = true;
+          else pending.start = true;
+          break;
         case 'clear':
         case 'gameover':
         case 'victory':
@@ -247,9 +254,9 @@ export function startPacBen(host: HTMLElement, options: PacBenOptions = {}): () 
       if (!run && (g.state === 'gameover' || g.state === 'victory')) g.savedRun = null;
       save();
     }
-    if (g.hiScore !== lastSaved.hi || g.unlocked !== lastSaved.unlocked || view.muted !== lastSaved.muted || g.difficulty !== lastSaved.difficulty) {
-      if (g.state !== 'play' || g.hiScore - lastSaved.hi > 5000 || g.unlocked !== lastSaved.unlocked || view.muted !== lastSaved.muted || g.difficulty !== lastSaved.difficulty) {
-        lastSaved = { hi: g.hiScore, unlocked: g.unlocked, muted: view.muted, difficulty: g.difficulty };
+    if (g.hiScore !== lastSaved.hi || g.unlocked !== lastSaved.unlocked || view.muted !== lastSaved.muted || g.difficulty !== lastSaved.difficulty || g.storySeen !== lastSaved.story) {
+      if (g.state !== 'play' || g.hiScore - lastSaved.hi > 5000 || g.unlocked !== lastSaved.unlocked || view.muted !== lastSaved.muted || g.difficulty !== lastSaved.difficulty || g.storySeen !== lastSaved.story) {
+        lastSaved = { hi: g.hiScore, unlocked: g.unlocked, muted: view.muted, difficulty: g.difficulty, story: g.storySeen };
         save();
       }
     }

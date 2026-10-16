@@ -12,6 +12,10 @@ export interface BenLook {
   scale?: number;
   /** 0 to 1 through the death animation. */
   death?: number;
+  /** Seconds standing still: he looks about. */
+  idle?: number;
+  /** 0 to 1: squashed flat (the moment he's hit). */
+  squash?: number;
 }
 
 export function drawBen(ctx: CanvasRenderingContext2D, x: number, y: number, facing: number, mouth: number, o: BenLook): void {
@@ -19,6 +23,10 @@ export function drawBen(ctx: CanvasRenderingContext2D, x: number, y: number, fac
   ctx.translate(x, y);
   const s = o.scale ?? 1;
   ctx.scale(s, s);
+  if (o.squash) ctx.scale(1 + o.squash * 0.25, 1 - o.squash * 0.35);
+  // Standing still for a while, he bobs gently.
+  const idle = o.idle !== undefined && o.idle > 1 ? o.idle - 1 : 0;
+  if (idle) ctx.translate(0, Math.sin(idle * 3) * 0.04);
   if (o.overdrive && o.overdrive > 0) {
     const pulse = 0.7 + Math.sin(o.t * 14) * 0.3;
     glow(ctx, 0, 0, 1.5, '#4a7bff', 0.8 * pulse);
@@ -60,7 +68,7 @@ export function drawBen(ctx: CanvasRenderingContext2D, x: number, y: number, fac
       ctx.strokeStyle = '#ff2d55';
       ctx.lineWidth = 0.08;
       ctx.lineCap = 'round';
-      const flap = o.t * (o.moving ? 20 : 6);
+      const flap = o.t * (o.moving ? 20 : idle ? 9 : 6);
       ctx.beginPath();
       ctx.moveTo(-0.38, -0.2);
       ctx.quadraticCurveTo(-0.52, -0.24, -0.66, -0.18 + Math.sin(flap) * 0.07);
@@ -72,9 +80,21 @@ export function drawBen(ctx: CanvasRenderingContext2D, x: number, y: number, fac
       ctx.beginPath();
       ctx.ellipse(0.05, -0.24, 0.1, 0.12, 0, 0, TAU);
       ctx.fill();
+      // Looks about while idle: ahead, back over his shoulder, up.
+      const look = idle ? Math.sin(idle * 1.7) : 1;
       ctx.fillStyle = '#1a1030';
-      circle(ctx, 0.09, -0.23, 0.052);
+      circle(ctx, 0.05 + 0.04 * look, -0.23 - (idle ? Math.max(0, Math.cos(idle * 1.1)) * 0.03 : 0), 0.052);
       ctx.fill();
+      if (o.squash) {
+        // Eyes screwed shut.
+        ctx.strokeStyle = '#1a1030';
+        ctx.lineWidth = 0.035;
+        ctx.beginPath();
+        ctx.moveTo(-0.02, -0.28);
+        ctx.lineTo(0.12, -0.22);
+        ctx.lineTo(-0.02, -0.18);
+        ctx.stroke();
+      }
       if (o.muzzle && o.muzzle > 0) {
         glow(ctx, 0.5, 0, 0.7, '#fff2a0', 1);
         ctx.fillStyle = '#ffffff';

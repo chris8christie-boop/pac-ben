@@ -17,6 +17,9 @@ A top-down maze shooter in the spirit of Pac-Man. Ben runs the corridors, eats t
 
 Ben moves while you hold a direction. Let go and he finishes the step he's on and stops, so you can stand and shoot. A turn you press early is taken at the next opening. He shoots the way he's facing. When the game sits inside another page, click it once so it gets the keyboard; it pauses if you click away.
 
+- **Story:** the first New Game opens with a three-part story of how Omega took over Neon City's robots. Watch it again from the title (WATCH THE STORY), or skip it with Esc.
+- **Bosses talk:** each one has something to say when it arrives, when it's badly hurt and when it's beaten.
+- **The ending:** beat Omega (in slow motion) and the credits roll: Ben, every robot and boss, your run's totals, and who made it. Enter skips to the end.
 - **Difficulty:** Rookie (the default) slows the robots and their shots, makes overdrive last longer, rebuilds destroyed robots more slowly and gives five lives and weaker bosses. Hero is the game as designed. Legend has faster robots, two lives and tougher bosses.
 - **Continue:** the run in progress (level, score, lives, difficulty) is saved in the browser, so CONTINUE on the title picks it up next time. Game over or finishing the game clears it.
 - **Clear a level** by eating every dot, as in Pac-Man. The count is at the bottom of the screen, and the last few glow so you can find them. There are about 100 a level. Robots keep coming: the factory rebuilds each one you destroy after a few seconds. On boss levels, destroy the boss instead.

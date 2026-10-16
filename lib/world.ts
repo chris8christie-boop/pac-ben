@@ -1,5 +1,5 @@
 /* Small helpers shared by the robots, the bosses and the main game loop. */
-import { ROBOT_SPECS } from './levels.ts';
+import { BOSS_SPECS, ROBOT_SPECS } from './levels.ts';
 import type { RobotKind } from './levels.ts';
 import { COLS, NONE, ROWS } from './maze.ts';
 import type { Bullet, BulletKind, Game, ParticleKind, Robot } from './types.ts';
@@ -8,6 +8,13 @@ export const TAU = Math.PI * 2;
 
 export function emit(g: Game, type: string, x?: number, y?: number): void {
   g.events.push({ type, x, y });
+}
+
+/** A boss's speech bubble: 0 when it arrives, 1 when badly hurt, 2 when beaten. */
+export function bossSays(g: Game, which: 0 | 1 | 2): void {
+  if (!g.boss) return;
+  g.taunt = { text: BOSS_SPECS[g.boss.kind].taunts[which], t: 0, life: which === 2 ? 3 : 2.6 };
+  emit(g, 'taunt');
 }
 
 export function dist(ax: number, ay: number, bx: number, by: number): number {

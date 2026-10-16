@@ -3,12 +3,13 @@ import { GW, GH, HUD_TOP, TAU, UI, rgba, glow, roundRect, text, panel } from './
 import type { Rect, View } from './render-util.ts';
 import { mazeCache } from './render-maze.ts';
 import { drawBen } from './render-ben.ts';
+import { drawShowBoss } from './render-bosses.ts';
 import { drawRobot } from './render-robots.ts';
 import { drawShot } from './render-fx.ts';
-import { BOSS_SPECS, CREDITS, DIFFICULTIES, DIFFICULTY_ORDER, LEVEL_COUNT, ROBOT_SPECS, SECTORS } from './levels.ts';
+import { BOSS_ORDER, BOSS_SPECS, CREDITS, CREDITS_FADE, CREDITS_TIME, DIFFICULTIES, DIFFICULTY_ORDER, LEVEL_COUNT, ROBOT_SPECS, SECTORS, STORY, STORY_TYPE_SPEED } from './levels.ts';
 import type { RobotKind } from './levels.ts';
 import { COLS, ROWS } from './maze.ts';
-import { titleRows } from './game.ts';
+import { storyTyped, titleRows } from './game.ts';
 import type { Bullet, Game } from './types.ts';
 
 export function drawIntro(view: View, g: Game): void {
@@ -140,22 +141,260 @@ export function drawGameOver(view: View, g: Game): void {
   ctx.restore();
 }
 
+function stars(view: View, t: number, height: number): void {
+  const ctx = view.ctx;
+  for (let i = 0; i < 80; i++) {
+    const x = (i * 137.5) % GW;
+    const y = (i * 71.3 + t * 0.25 * (1 + (i % 3))) % height;
+    ctx.fillStyle = `rgba(200,220,255,${0.25 + 0.35 * Math.abs(Math.sin(t * 1.3 + i))})`;
+    ctx.fillRect(x, y, 0.08 + (i % 3) * 0.03, 0.08 + (i % 3) * 0.03);
+  }
+}
+
+function clock(seconds: number): string {
+  const s = Math.floor(seconds);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const two = (n: number) => String(n).padStart(2, '0');
+  return h > 0 ? `${h}:${two(m)}:${two(s % 60)}` : `${m}:${two(s % 60)}`;
+}
+
+/* ---------- the opening story ---------- */
+
+function cityScene(view: View, g: Game, t: number): void {
+  const ctx = view.ctx;
+  const taken = Math.max(0, Math.min(1, (t - STORY[0].lines[0].length / STORY_TYPE_SPEED) / 0.8));
+  const neon = taken > 0.5 ? '#ff3355' : '#2f7bff';
+  // Sky turns red as Omega arrives.
+  if (taken > 0) {
+    ctx.fillStyle = `rgba(120,0,20,${taken * 0.35})`;
+    ctx.fillRect(0, 1, GW, 21);
+  }
+  if (taken > 0) drawShowBoss(view, g, 'omega', 14, 6.4, 1.4, taken);
+  if (taken > 0 && taken < 0.6) {
+    ctx.fillStyle = `rgba(255,60,90,${(0.6 - taken) * 0.8})`;
+    ctx.fillRect(0, 1, GW, 21);
+  }
+  // Skyline.
+  for (let i = 0; i < 10; i++) {
+    const x = i * 2.9 - 0.5;
+    const h = 4 + ((i * 7) % 5) * 1.5;
+    ctx.fillStyle = '#0b1230';
+    ctx.fillRect(x, 20 - h, 2.4, h);
+    ctx.strokeStyle = rgba(neon, 0.8);
+    ctx.lineWidth = 0.07;
+    ctx.strokeRect(x, 20 - h, 2.4, h);
+    for (let wy = 20 - h + 0.6; wy < 19.4; wy += 1) {
+      for (let wx = x + 0.4; wx < x + 2.1; wx += 0.7) {
+        const lit = ((wx * 13 + wy * 7) | 0) % 3 !== 0;
+        if (lit) {
+          ctx.fillStyle = taken > 0.5 ? 'rgba(255,90,110,0.7)' : 'rgba(255,226,140,0.7)';
+          ctx.fillRect(wx, wy, 0.3, 0.4);
+        }
+      }
+    }
+  }
+  ctx.fillStyle = rgba(neon, 0.6);
+  ctx.fillRect(0, 20, GW, 0.08);
+  // The robots, going about their day, until their eyes turn red.
+  const kinds: RobotKind[] = ['chaser', 'ambusher', 'flanker', 'wanderer', 'tank'];
+  kinds.forEach((kind, i) => {
+    const x = ((i * 5.5 + t * 1.2 * (taken > 0.5 ? 0 : 1)) % 30) - 1;
+    if (taken > 0.5) glow(ctx, x, 19.2, 1.1, '#ff2a3d', 0.7);
+    drawRobot(ctx, kind, x, 19.2, taken > 0.5 ? 2 : 1, { t: g.time + i, scale: 1.25 });
+  });
+}
+
+function mazesScene(view: View, g: Game, t: number): void {
+  const ctx = view.ctx;
+  const cache = mazeCache(view, g);
+  ctx.save();
+  ctx.globalAlpha = 0.55;
+  ctx.drawImage(cache.canvas, 7.5, 3, 13, (13 * ROWS) / COLS);
+  ctx.restore();
+  const cx = 14;
+  const cy = 3 + (13 * ROWS) / COLS / 2;
+  const pulse = 0.8 + Math.sin(g.time * 5) * 0.2;
+  glow(ctx, cx, cy, 4 * pulse, '#ffd23f', 0.9);
+  glow(ctx, cx, cy, 2 * pulse, '#ffffff', 0.9);
+  ctx.strokeStyle = 'rgba(255,240,180,0.8)';
+  ctx.lineWidth = 0.08;
+  for (let i = 0; i < 3; i++) {
+    ctx.beginPath();
+    ctx.arc(cx, cy, 1 + i * 0.5, g.time * (1 + i) + i, g.time * (1 + i) + i + 2.2);
+    ctx.stroke();
+  }
+  BOSS_ORDER.forEach((kind, i) => {
+    const appear = Math.max(0, Math.min(1, (t - 0.3 - i * 0.25) * 3));
+    if (!appear) return;
+    const a = -Math.PI / 2 + (i / BOSS_ORDER.length) * TAU;
+    drawShowBoss(view, g, kind, cx + Math.cos(a) * 10.5, cy + Math.sin(a) * 8, 0.55, appear);
+  });
+}
+
+function heroScene(view: View, g: Game, t: number): void {
+  const ctx = view.ctx;
+  // Speed lines.
+  ctx.strokeStyle = 'rgba(255,210,63,0.35)';
+  ctx.lineWidth = 0.08;
+  for (let i = 0; i < 14; i++) {
+    const y = 3 + ((i * 1.37) % 1) * 0 + i * 1.2;
+    const x = GW - ((g.time * 22 + i * 7.3) % (GW + 8));
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + 3 + (i % 3), y);
+    ctx.stroke();
+  }
+  const zoom = Math.min(1, t * 1.5);
+  glow(ctx, 14, 10.5, 7 * zoom, '#ffd23f', 0.5);
+  drawBen(ctx, 14, 10.5, 1, g.time * 10, { t: g.time, moving: true, scale: 1 + zoom * 3.4 });
+  const named = Math.max(0, Math.min(1, (storyTyped(g) - STORY[2].lines[0].length - 10) / 6));
+  if (named > 0) text(view, 'BEN', 14, 18.6, 3.2, '#ffd23f', { weight: 900, glow: '#ff9d00', stroke: '#7a3a00', alpha: named });
+}
+
+export function drawStory(view: View, g: Game): void {
+  const ctx = view.ctx;
+  const panelIndex = Math.min(g.storyPanel, STORY.length - 1);
+  const story = STORY[panelIndex];
+  const t = g.stateT;
+  ctx.fillStyle = '#03050d';
+  ctx.fillRect(0, 0, GW, GH);
+  stars(view, g.time, 22);
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(0, 1, GW, 21.5);
+  ctx.clip();
+  if (story.scene === 'city') cityScene(view, g, t);
+  else if (story.scene === 'mazes') mazesScene(view, g, t);
+  else heroScene(view, g, t);
+  ctx.restore();
+
+  panel(ctx, 1.2, 23.2, 25.6, 5.6, '#ffd23f');
+  const typed = storyTyped(g);
+  const [one, two] = story.lines;
+  const first = one.slice(0, typed);
+  const second = two.slice(0, Math.max(0, typed - one.length));
+  text(view, first, 2.4, 25.1, 0.66, '#ffffff', { align: 'left', weight: 800, maxWidth: 23.4 });
+  text(view, second, 2.4, 26.9, 0.66, '#ffd23f', { align: 'left', weight: 900, maxWidth: 23.4 });
+  const done = typed >= one.length + two.length;
+  for (let i = 0; i < STORY.length; i++) {
+    ctx.fillStyle = i <= panelIndex ? '#ffd23f' : 'rgba(255,255,255,0.2)';
+    ctx.beginPath();
+    ctx.arc(14 + (i - (STORY.length - 1) / 2) * 1.2, 30.4, 0.22, 0, TAU);
+    ctx.fill();
+  }
+  if (done && Math.floor(g.time * 2.2) % 2 === 0) {
+    const last = panelIndex === STORY.length - 1;
+    const verb = view.layout.touch ? 'TAP' : 'PRESS ENTER';
+    text(view, `${verb} TO ${last ? (g.storyThen ? 'PLAY' : 'FINISH') : 'CONTINUE'}`, 14, 32.4, 0.55, '#ffffff', { weight: 900 });
+  }
+  const r = UI.skip;
+  roundRect(ctx, r.x, r.y, r.w, r.h, 0.5);
+  ctx.fillStyle = 'rgba(255,255,255,0.08)';
+  ctx.fill();
+  text(view, view.layout.touch ? 'SKIP ▶▶' : 'ESC: SKIP ▶▶', r.x + r.w / 2, r.y + r.h / 2, 0.42, '#c8cfe8', { weight: 800 });
+}
+
+/* ---------- the ending ---------- */
+
+interface CreditItem {
+  h: number;
+  draw: (y: number) => void;
+}
+
+function creditItems(view: View, g: Game): CreditItem[] {
+  const ctx = view.ctx;
+  const items: CreditItem[] = [];
+  const label = (s: string) => items.push({ h: 2, draw: (y) => text(view, s, 14, y + 1, 0.55, '#8a93b8', { weight: 800 }) });
+  const gap = (h: number) => items.push({ h, draw: () => undefined });
+  items.push({ h: 4.4, draw: (y) => text(view, 'PAC BEN', 14, y + 2, 3, '#ffd23f', { weight: 900, glow: '#ff9d00', stroke: '#7a3a00', maxWidth: 25 }) });
+  gap(1);
+  label('STARRING');
+  items.push({ h: 3.6, draw: (y) => drawBen(ctx, 14, y + 1.8, 1, g.time * 9, { t: g.time, moving: true, scale: 2.6 }) });
+  items.push({ h: 2.8, draw: (y) => text(view, 'BEN', 14, y + 1.3, 1.6, '#ffd23f', { weight: 900, glow: '#ff9d00' }) });
+  gap(1.5);
+  label('THE ROBOTS');
+  for (const kind of Object.keys(ROBOT_SPECS) as RobotKind[]) {
+    const spec = ROBOT_SPECS[kind];
+    items.push({
+      h: 2,
+      draw: (y) => {
+        drawRobot(ctx, kind, 7, y + 1, 1, { t: g.time, scale: 1.25 });
+        text(view, spec.name, 9.2, y + 0.75, 0.58, spec.color, { align: 'left', weight: 900 });
+        text(view, spec.blurb.toUpperCase(), 9.2, y + 1.45, 0.33, '#c8cfe8', { align: 'left', maxWidth: 17 });
+      },
+    });
+  }
+  gap(1.5);
+  label('THE BOSSES');
+  for (const kind of BOSS_ORDER) {
+    const spec = BOSS_SPECS[kind];
+    items.push({
+      h: 4,
+      draw: (y) => {
+        drawShowBoss(view, g, kind, 7.2, y + 2, 0.72);
+        text(view, spec.name, 10.6, y + 1.6, 0.78, spec.color, { align: 'left', weight: 900, glow: spec.color });
+        text(view, spec.title, 10.6, y + 2.55, 0.38, '#c8cfe8', { align: 'left' });
+      },
+    });
+  }
+  gap(1.5);
+  label('YOUR RUN');
+  const stats: [string, string][] = [
+    ['ROBOTS DESTROYED', String(g.run.kills)],
+    ['DOTS EATEN', String(g.run.dots)],
+    ['TIME', clock(g.run.time)],
+    ['DIFFICULTY', DIFFICULTIES[g.difficulty].name],
+    ['FINAL SCORE', String(g.score)],
+  ];
+  for (const [k, v] of stats) {
+    items.push({
+      h: 1.2,
+      draw: (y) => {
+        text(view, k, 6.5, y + 0.6, 0.5, '#c8cfe8', { align: 'left', weight: 700 });
+        text(view, v, 21.5, y + 0.6, 0.6, '#ffffff', { align: 'right', weight: 900 });
+      },
+    });
+  }
+  if (g.score > 0 && g.score >= g.hiScore) items.push({ h: 1.6, draw: (y) => text(view, 'NEW HIGH SCORE!', 14, y + 0.9, 0.6, '#ffd23f', { weight: 900, glow: '#ffb000' }) });
+  gap(2.5);
+  items.push({ h: 2.6, draw: (y) => text(view, CREDITS, 14, y + 1.3, 0.95, '#ffd23f', { weight: 900, glow: '#ff9d00', maxWidth: 25 }) });
+  items.push({ h: 2.4, draw: (y) => text(view, 'THANKS FOR PLAYING!', 14, y + 1.2, 0.8, '#ffffff', { weight: 900 }) });
+  return items;
+}
+
+/** The ending: the maze flashes white and fades, then the credits roll. */
 export function drawVictory(view: View, g: Game): void {
   const ctx = view.ctx;
   const t = g.stateT;
-  ctx.fillStyle = 'rgba(2,3,10,0.75)';
-  ctx.fillRect(0, 0, GW, GH);
-  for (let i = 0; i < 6; i++) {
-    const a = t * 0.8 + (i / 6) * TAU;
-    glow(ctx, 14 + Math.cos(a) * 9, 15 + Math.sin(a * 1.3) * 6, 4, SECTORS[i].wall, 0.35);
+  if (t < CREDITS_FADE) {
+    const a = t / CREDITS_FADE;
+    ctx.fillStyle = `rgba(255,255,255,${Math.min(0.92, a * 2)})`;
+    ctx.fillRect(0, 0, GW, GH);
+    if (a > 0.5) {
+      ctx.fillStyle = `rgba(3,5,13,${(a - 0.5) * 2})`;
+      ctx.fillRect(0, 0, GW, GH);
+    }
+    return;
   }
-  text(view, 'YOU WIN!', 14, 10, 2.4, '#ffd23f', { weight: 900, glow: '#ffb000' });
-  text(view, 'ALL 30 LEVELS CLEARED', 14, 12.6, 0.7, '#ffffff', { weight: 800 });
-  text(view, 'OMEGA IS SCRAP. THE MAZE IS FREE.', 14, 13.9, 0.5, '#c8cfe8');
-  drawBen(ctx, 14, 17.5, 1, t * 8, { t, moving: true, scale: 2.4 });
-  text(view, `FINAL SCORE ${g.score}`, 14, 21.5, 0.9, '#ffffff', { weight: 900 });
-  if (g.score >= g.hiScore) text(view, 'NEW HIGH SCORE!', 14, 23, 0.6, '#ffd23f', { weight: 900 });
-  if (t > 1.5 && Math.floor(g.time * 2) % 2 === 0) text(view, view.layout.touch ? 'TAP TO CONTINUE' : 'PRESS ENTER', 14, 26, 0.55, '#ffffff', { weight: 800 });
+  ctx.fillStyle = '#03050d';
+  ctx.fillRect(0, 0, GW, GH);
+  stars(view, g.time, GH);
+  const items = creditItems(view, g);
+  let height = 0;
+  for (const it of items) height += it.h;
+  const travel = GH / 2 - 2 + height;
+  const progress = Math.min(1, (t - CREDITS_FADE) / (CREDITS_TIME - CREDITS_FADE));
+  let y = GH + 1 - travel * progress;
+  for (const it of items) {
+    if (y + it.h > -2 && y < GH + 2) it.draw(y);
+    y += it.h;
+  }
+  if (t >= CREDITS_TIME && Math.floor(g.time * 2) % 2 === 0) {
+    text(view, view.layout.touch ? 'TAP TO FINISH' : 'PRESS ENTER', 14, GH - 3, 0.6, '#ffffff', { weight: 900 });
+  } else if (t < CREDITS_TIME) {
+    text(view, view.layout.touch ? 'TAP TO SKIP' : 'ENTER: SKIP', GW - 1, GH - 1, 0.36, '#5a6388', { align: 'right' });
+  }
 }
 
 export function drawTitle(view: View, g: Game): void {
@@ -255,6 +494,9 @@ export function drawTitle(view: View, g: Game): void {
         arrows(i0 > 0, i0 < DIFFICULTY_ORDER.length - 1);
         break;
       }
+      case 'story':
+        text(view, 'WATCH THE STORY', 14, cy, 0.5, lit ? '#8fb0ff' : '#6a73a0', { weight: 800 });
+        break;
       case 'sector': {
         const sector = SECTORS[g.menuSector];
         text(view, 'START AT', r.x + 2.1, cy, 0.42, ink, { align: 'left', weight: 700 });
@@ -277,6 +519,6 @@ export function drawTitle(view: View, g: Game): void {
 /** Where row `i` of the title menu sits, in tiles. */
 export function titleRowRect(g: Game, i: number): Rect {
   const rows = titleRows(g);
-  const top = 23.3 + (4 - rows.length) * 0.45;
-  return { x: 4, y: top + i * 1.55, w: 20, h: 1.4 };
+  const top = 22.9 + (5 - rows.length) * 0.55;
+  return { x: 4, y: top + i * 1.42, w: 20, h: 1.28 };
 }
