@@ -23,45 +23,78 @@ function playing(level = 1, seed = 7): Game {
  * The test bot: heads for the nearest dot (or the boss) and fires all the time.
  * It plans from the tile centre it is about to reach.
  */
+let goal = -1;
+let goalLevel = -1;
+
+/**
+ * The test bot: heads for one dot at a time (or the boss) and fires all the time.
+ * It plans from the tile centre it is about to reach, walks round teleport
+ * pads when it can, and when it must use one it lets go of the controls so
+ * Ben stops on the far side and it can plan again from there.
+ */
 function hunt(g: Game): Controls {
   const p = g.player;
   const m = g.maze;
   const control = (dir: number): Controls => ({ ...NO_INPUT, dir, fire: true, start: g.state === 'clear' });
-  if (!atCentre(p) && p.dir < 0) return control(LEFT);
-  // Just stepped off the pad it arrived on: finish the step first (the pad works again from the next tile).
-  if (!atCentre(p) && p.portalLock >= 0) return control(p.dir);
+  if (!atCentre(p) && p.dir < 0) return control(Number.isInteger(p.x) ? UP : LEFT);
   const boss = g.boss && !g.boss.dead ? g.boss : null;
-  const isTarget = (i: number) => (boss ? Math.hypot((i % 28) - boss.x, Math.floor(i / 28) - boss.y) < 2.5 : g.dots[i] > 0);
+  if (!boss && (goal < 0 || g.dots[goal] === 0 || goalLevel !== g.level)) {
+    goal = -1;
+    goalLevel = g.level;
+  }
+  const isTarget = (i: number) => (boss ? Math.hypot((i % 28) - boss.x, Math.floor(i / 28) - boss.y) < 2.5 : goal >= 0 ? i === goal : g.dots[i] > 0);
+
   // Plan from the tile centre Ben is about to reach.
   let startTile = tileIndex(p.x, p.y);
+  let behind = -1;
   if (!atCentre(p)) {
     const ahead = (v: number, d: number) => (d > 0 ? Math.floor(v + 1e-6) + 1 : Math.ceil(v - 1e-6) - 1);
+    const back = (v: number, d: number) => (d > 0 ? Math.floor(v + 1e-6) : Math.ceil(v - 1e-6));
     startTile = DX[p.dir] ? tileIndex(ahead(p.x, DX[p.dir]), p.y) : tileIndex(p.x, ahead(p.y, DY[p.dir]));
-    // About to step onto a pad: keep going and plan again on the other side.
-    if (m.portalLink[startTile] >= 0) return control(p.dir);
+    behind = DX[p.dir] ? tileIndex(back(p.x, DX[p.dir]), p.y) : tileIndex(p.x, back(p.y, DY[p.dir]));
+    // About to step onto a pad: let go, so Ben stops on the far side.
+    if (m.portalLink[startTile] >= 0) return control(-1);
     if (isTarget(startTile)) return control(p.dir);
   }
-  const first = new Int8Array(m.tiles.length).fill(-1);
-  const seen = new Uint8Array(m.tiles.length);
-  seen[startTile] = 1;
-  const queue = [startTile];
-  for (let q = 0; q < queue.length; q++) {
-    const u = queue[q];
-    if (u !== startTile && isTarget(u)) return control(first[u]);
-    const ux = u % 28;
-    const uy = (u - ux) / 28;
-    for (let d = 0; d < 4; d++) {
-      if (!canGo(m, ux, uy, d)) continue;
-      let v = tileIndex(ux + DX[d], uy + DY[d]);
-      // Stepping onto a teleport pad lands you on its partner.
-      if (m.portalLink[v] >= 0) v = m.portalLink[v];
-      if (seen[v]) continue;
-      seen[v] = 1;
-      first[v] = u === startTile ? d : first[u];
-      queue.push(v);
+
+  const plan = (usePads: boolean): number => {
+    const first = new Int8Array(m.tiles.length).fill(-1);
+    const seen = new Uint8Array(m.tiles.length);
+    seen[startTile] = 1;
+    if (behind >= 0) {
+      seen[behind] = 1;
+      if (m.portalLink[behind] >= 0) seen[m.portalLink[behind]] = 1;
     }
-  }
-  return control(-1);
+    const queue = [startTile];
+    for (let q = 0; q < queue.length; q++) {
+      const u = queue[q];
+      if (u !== startTile && isTarget(u)) {
+        if (!boss) goal = u;
+        return first[u];
+      }
+      const ux = u % 28;
+      const uy = (u - ux) / 28;
+      for (let d = 0; d < 4; d++) {
+        if (!canGo(m, ux, uy, d)) continue;
+        let v = tileIndex(ux + DX[d], uy + DY[d]);
+        if (m.portalLink[v] >= 0) {
+          if (!usePads) continue;
+          v = m.portalLink[v];
+        }
+        if (seen[v]) continue;
+        seen[v] = 1;
+        first[v] = u === startTile ? d : first[u];
+        queue.push(v);
+      }
+    }
+    return -1;
+  };
+  let dir = plan(false);
+  if (dir < 0) dir = plan(true);
+  if (dir >= 0) return control(dir);
+  // Nothing reachable from here (the goal may sit behind the tile just left): pick another next frame.
+  goal = -1;
+  return control(p.dir);
 }
 
 test('levels get harder, and every fifth is a boss', () => {
