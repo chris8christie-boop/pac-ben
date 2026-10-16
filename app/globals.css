@@ -1,0 +1,22 @@
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: #03050d;
+  overflow: hidden;
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+}
+
+body {
+  position: fixed;
+  inset: 0;
+}
+
+.game {
+  position: absolute;
+  inset: 0;
+  box-sizing: border-box;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
