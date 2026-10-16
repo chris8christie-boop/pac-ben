@@ -6,10 +6,10 @@ import { drawBen } from './render-ben.ts';
 import { drawShowBoss } from './render-bosses.ts';
 import { drawRobot } from './render-robots.ts';
 import { drawShot } from './render-fx.ts';
-import { BOSS_ORDER, BOSS_SPECS, CREDITS, CREDITS_FADE, CREDITS_TIME, DIFFICULTIES, DIFFICULTY_ORDER, LEVEL_COUNT, ROBOT_SPECS, SECTORS, STORY, STORY_TYPE_SPEED } from './levels.ts';
+import { BOSS_ORDER, BOSS_SPECS, CREDITS, CREDITS_FADE, CREDITS_TIME, DIFFICULTIES, DIFFICULTY_ORDER, LEVEL_COUNT, LEVELS_PER_SECTOR, ROBOT_SPECS, SECTORS, STORY, STORY_TYPE_SPEED, sectorOf } from './levels.ts';
 import type { RobotKind } from './levels.ts';
 import { COLS, ROWS } from './maze.ts';
-import { storyTyped, titleRows } from './game.ts';
+import { OVER_ROWS, storyTyped, titleRows } from './game.ts';
 import type { Bullet, Game } from './types.ts';
 
 export function drawIntro(view: View, g: Game): void {
@@ -131,17 +131,41 @@ export function drawGameOver(view: View, g: Game): void {
   const a = Math.min(1, g.stateT * 2);
   ctx.save();
   ctx.globalAlpha = a;
-  ctx.fillStyle = 'rgba(2,3,10,0.6)';
+  ctx.fillStyle = 'rgba(2,3,10,0.72)';
   ctx.fillRect(0, HUD_TOP, GW, ROWS);
   text(view, 'GAME OVER', 14, 14, 2, '#ff3b5c', { weight: 900, glow: '#ff3b5c' });
   text(view, `SCORE ${g.score}`, 14, 16.6, 0.8, '#ffffff', { weight: 800 });
   text(view, `REACHED LEVEL ${g.level} OF ${LEVEL_COUNT}`, 14, 18, 0.5, '#8a93b8');
   if (g.score > 0 && g.score >= g.hiScore) text(view, 'NEW HIGH SCORE!', 14, 19.6, 0.7, '#ffd23f', { weight: 900, glow: '#ffb000' });
-  if (g.stateT > 1.5 && Math.floor(g.time * 2) % 2 === 0) {
-    text(view, view.layout.touch ? 'TAP TO CONTINUE' : 'PRESS ENTER TO CONTINUE', 14, 22.5, 0.55, '#ffffff', { weight: 800 });
+  if (g.stateT > 1.5) {
+    // The lifesaver, and the way out.
+    const k = Math.min(1, (g.stateT - 1.5) * 4);
+    ctx.globalAlpha = a * k;
+    OVER_ROWS.forEach((row, i) => {
+      const r = overRowRect(i);
+      const lit = i === g.overRow;
+      const cy = r.y + r.h / 2;
+      const color = row === 'retry' ? '#7dff8a' : '#c8cfe8';
+      ctx.fillStyle = lit ? rgba(color, 0.14) : 'rgba(255,255,255,0.03)';
+      ctx.strokeStyle = lit ? color : 'rgba(255,255,255,0.12)';
+      ctx.lineWidth = 0.08;
+      roundRect(ctx, r.x, r.y, r.w, r.h, 0.5);
+      ctx.fill();
+      ctx.stroke();
+      if (row === 'retry') {
+        text(view, `LIFESAVER: TRY LEVEL ${g.level} AGAIN`, 14, cy - 0.28, 0.6, lit ? '#7dff8a' : '#a8d8b0', { weight: 900, glow: lit ? '#2bd94a' : undefined, maxWidth: r.w - 1 });
+        text(view, `FULL LIVES  ·  SCORE GOES BACK TO ${g.levelScore}`, 14, cy + 0.52, 0.38, '#e0e6ff', { weight: 700, maxWidth: r.w - 1 });
+      } else text(view, 'BACK TO THE TITLE', 14, cy, 0.5, lit ? '#ffffff' : '#8a93b8', { weight: 800 });
+    });
+    const hint = view.layout.touch ? 'TAP ONE' : '↑ ↓ CHOOSE  ·  ENTER: GO';
+    text(view, hint, 14, 25.6, 0.36, '#8a93b8');
   }
-  if (g.unlocked > 0) text(view, 'YOU CAN RESTART FROM ANY SECTOR YOU HAVE REACHED', 14, 24, 0.36, '#8a93b8', { maxWidth: 25 });
   ctx.restore();
+}
+
+/** Where each game over button sits, in game units; also used to tell which one was tapped. */
+export function overRowRect(i: number): Rect {
+  return i === 0 ? { x: 4.5, y: 20.6, w: 19, h: 2 } : { x: 7, y: 23, w: 14, h: 1.4 };
 }
 
 function stars(view: View, t: number, height: number): void {
@@ -500,11 +524,14 @@ export function drawTitle(view: View, g: Game): void {
       case 'story':
         text(view, 'WATCH THE STORY', 14, cy, 0.5, lit ? '#8fb0ff' : '#6a73a0', { weight: 800 });
         break;
-      case 'sector': {
-        const sector = SECTORS[g.menuSector];
+      case 'level': {
+        const n = g.menuLevel;
+        const s = sectorOf(n);
+        const sector = SECTORS[s];
+        const what = n % LEVELS_PER_SECTOR === 0 ? `BOSS: ${BOSS_SPECS[BOSS_ORDER[s]].name}` : sector.name;
         text(view, 'START AT', r.x + 2.1, cy, 0.42, ink, { align: 'left', weight: 700 });
-        text(view, `SECTOR ${g.menuSector + 1}: ${sector.name}`, r.x + r.w - 2.1, cy, 0.5, lit ? sector.wall : ink, { align: 'right', weight: 900, maxWidth: r.w - 8 });
-        arrows(g.menuSector > 0, g.menuSector < g.unlocked);
+        text(view, `LEVEL ${n} · ${what}`, r.x + r.w - 2.1, cy, 0.5, lit ? sector.wall : ink, { align: 'right', weight: 900, maxWidth: r.w - 8 });
+        arrows(n > 1, n < g.reached);
         break;
       }
     }

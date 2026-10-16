@@ -3,10 +3,10 @@
  * sound and saved progress. Returns a function that removes it all again.
  */
 import { createSound } from './audio.ts';
-import { createGame, drainEvents, loadLevel, runSnapshot, startRun, STEP, titleRows, update } from './game.ts';
+import { OVER_ROWS, createGame, drainEvents, loadLevel, runSnapshot, startRun, STEP, titleRows, update } from './game.ts';
 import { createInput } from './input.ts';
 import { render } from './render.ts';
-import { titleRowRect } from './render-screens.ts';
+import { overRowRect, titleRowRect } from './render-screens.ts';
 import { GH, GW, UI, computeLayout } from './render-util.ts';
 import type { Layout, View } from './render-util.ts';
 import type { Difficulty } from './levels.ts';
@@ -33,7 +33,9 @@ const SAVE_KEY = 'pacben.save.v1';
 
 interface Saved {
   hiScore: number;
-  unlocked: number;
+  /** Highest level reached. Older saves have `unlocked`, the highest sector, instead. */
+  reached: number;
+  unlocked?: number;
   muted: boolean;
   difficulty?: Difficulty;
   run?: SavedRun | null;
@@ -45,12 +47,12 @@ function load(): Saved {
     const raw = window.localStorage.getItem(SAVE_KEY);
     if (raw) {
       const s = JSON.parse(raw) as Partial<Saved>;
-      return { hiScore: Number(s.hiScore) || 0, unlocked: Number(s.unlocked) || 0, muted: !!s.muted, difficulty: s.difficulty, run: s.run ?? null, storySeen: !!s.storySeen };
+      return { hiScore: Number(s.hiScore) || 0, reached: Number(s.reached) || 1, unlocked: Number(s.unlocked) || 0, muted: !!s.muted, difficulty: s.difficulty, run: s.run ?? null, storySeen: !!s.storySeen };
     }
   } catch {
     // Private windows and blocked storage: play without saving.
   }
-  return { hiScore: 0, unlocked: 0, muted: false, run: null };
+  return { hiScore: 0, reached: 1, muted: false, run: null };
 }
 
 function store(s: Saved): void {
@@ -98,7 +100,7 @@ export function startPacBen(host: HTMLElement, options: PacBenOptions = {}): () 
   const ctx = canvas.getContext('2d', { alpha: false })!;
 
   const saved = load();
-  const g = createGame({ hiScore: saved.hiScore, unlocked: saved.unlocked, difficulty: saved.difficulty, run: saved.run, storySeen: saved.storySeen });
+  const g = createGame({ hiScore: saved.hiScore, reached: saved.reached, unlocked: saved.unlocked, difficulty: saved.difficulty, run: saved.run, storySeen: saved.storySeen });
   const sound = createSound(saved.muted);
   const resume = options.resume;
   if (resume && resume.level >= 1 && resume.lives > 0) {
@@ -144,9 +146,9 @@ export function startPacBen(host: HTMLElement, options: PacBenOptions = {}): () 
   function save(): void {
     const run = runSnapshot(g) ?? g.savedRun;
     lastRunKey = run ? `${run.level}/${run.lives}` : '';
-    store({ hiScore: g.hiScore, unlocked: g.unlocked, muted: sound.isMuted(), difficulty: g.difficulty, run, storySeen: g.storySeen });
+    store({ hiScore: g.hiScore, reached: g.reached, muted: sound.isMuted(), difficulty: g.difficulty, run, storySeen: g.storySeen });
   }
-  let lastSaved = { hi: g.hiScore, unlocked: g.unlocked, muted: saved.muted, difficulty: g.difficulty, story: g.storySeen };
+  let lastSaved = { hi: g.hiScore, reached: g.reached, muted: saved.muted, difficulty: g.difficulty, story: g.storySeen };
 
   function handleTaps(): void {
     for (const tap of input.taps()) {
@@ -178,7 +180,7 @@ export function startPacBen(host: HTMLElement, options: PacBenOptions = {}): () 
             break;
           }
           pending.menuRow = hit;
-          const picker = rows[hit] === 'difficulty' || rows[hit] === 'sector';
+          const picker = rows[hit] === 'difficulty' || rows[hit] === 'level';
           if (picker && gx < GW / 3) pending.left = true;
           else if (picker && gx > (GW * 2) / 3) pending.right = true;
           else if (hit === g.menuRow || !picker) pending.start = true;
@@ -188,8 +190,15 @@ export function startPacBen(host: HTMLElement, options: PacBenOptions = {}): () 
           if (inRect(gx, gy, UI.skip)) pending.back = true;
           else pending.start = true;
           break;
-        case 'clear':
         case 'gameover':
+          // Only the two buttons count, so a stray tap can't throw away the lifesaver.
+          for (let i = 0; i < OVER_ROWS.length; i++) {
+            if (!inRect(gx, gy, overRowRect(i))) continue;
+            pending.menuRow = i;
+            pending.start = true;
+          }
+          break;
+        case 'clear':
         case 'victory':
           pending.start = true;
           break;
@@ -247,16 +256,16 @@ export function startPacBen(host: HTMLElement, options: PacBenOptions = {}): () 
     render(view, g);
 
     // Save when something lasting changes: the run reaching a new level or losing a life, a record,
-    // a new sector, the difficulty or the sound setting. Score alone is saved when the page is hidden.
+    // a new level reached, the difficulty or the sound setting. Score alone is saved when the page is hidden.
     const run = runSnapshot(g);
     const runKey = run ? `${run.level}/${run.lives}` : g.state === 'gameover' || g.state === 'victory' ? '' : lastRunKey;
     if (runKey !== lastRunKey && (g.state !== 'play' || run)) {
       if (!run && (g.state === 'gameover' || g.state === 'victory')) g.savedRun = null;
       save();
     }
-    if (g.hiScore !== lastSaved.hi || g.unlocked !== lastSaved.unlocked || view.muted !== lastSaved.muted || g.difficulty !== lastSaved.difficulty || g.storySeen !== lastSaved.story) {
-      if (g.state !== 'play' || g.hiScore - lastSaved.hi > 5000 || g.unlocked !== lastSaved.unlocked || view.muted !== lastSaved.muted || g.difficulty !== lastSaved.difficulty || g.storySeen !== lastSaved.story) {
-        lastSaved = { hi: g.hiScore, unlocked: g.unlocked, muted: view.muted, difficulty: g.difficulty, story: g.storySeen };
+    if (g.hiScore !== lastSaved.hi || g.reached !== lastSaved.reached || view.muted !== lastSaved.muted || g.difficulty !== lastSaved.difficulty || g.storySeen !== lastSaved.story) {
+      if (g.state !== 'play' || g.hiScore - lastSaved.hi > 5000 || g.reached !== lastSaved.reached || view.muted !== lastSaved.muted || g.difficulty !== lastSaved.difficulty || g.storySeen !== lastSaved.story) {
+        lastSaved = { hi: g.hiScore, reached: g.reached, muted: view.muted, difficulty: g.difficulty, story: g.storySeen };
         save();
       }
     }

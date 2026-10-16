@@ -2,7 +2,7 @@
  * The game: state, rules and the update step. No drawing and no browser APIs,
  * so it runs the same in tests as in the page.
  */
-import { BOSS_SPECS, CREDITS_TIME, DIFFICULTIES, DIFFICULTY_ORDER, LEVEL_COUNT, ROBOT_SPECS, SECTORS, STORY, STORY_TYPE_SPEED, firstLevelOf, levelSpec } from './levels.ts';
+import { BOSS_SPECS, CREDITS_TIME, DIFFICULTIES, DIFFICULTY_ORDER, LEVEL_COUNT, ROBOT_SPECS, SECTORS, STORY, STORY_TYPE_SPEED, firstLevelOf, levelSpec, sectorOf } from './levels.ts';
 import type { Difficulty, LevelSpec, RobotKind } from './levels.ts';
 import { COLS, DX, LEFT, NONE, PATH, RIGHT, advance, atCentre, canGo, distanceMap, generateMaze, opposite, tileAt, tileIndex } from './maze.ts';
 import type { Mover } from './maze.ts';
@@ -14,20 +14,23 @@ import type { Bullet, Controls, Game, GameEvent, Laser, Pickup, Player, PowerKin
 
 export interface SaveData {
   hiScore: number;
-  unlocked: number;
+  /** Highest level reached. */
+  reached?: number;
+  /** Older saves kept the highest sector reached (0-5) instead. */
+  unlocked?: number;
   difficulty?: Difficulty;
   run?: SavedRun | null;
   storySeen?: boolean;
 }
 
 /** The rows of the title menu, top to bottom. */
-export type MenuRow = 'continue' | 'new' | 'difficulty' | 'sector' | 'story';
+export type MenuRow = 'continue' | 'new' | 'difficulty' | 'level' | 'story';
 
 export function titleRows(g: Game): MenuRow[] {
   const rows: MenuRow[] = [];
   if (g.savedRun) rows.push('continue');
   rows.push('new', 'difficulty');
-  if (g.unlocked > 0) rows.push('sector');
+  if (g.reached > 1) rows.push('level');
   rows.push('story');
   return rows;
 }
@@ -97,7 +100,9 @@ export function createGame(save: SaveData, seed = Date.now()): Game {
   const difficulty: Difficulty = isDifficulty(save.difficulty) ? save.difficulty : 'rookie';
   const spec = levelSpec(1, difficulty);
   const maze = mazeFor(spec);
-  const unlocked = clamp(Math.floor(save.unlocked) || 0, 0, SECTORS.length - 1);
+  const savedRun = validRun(save.run);
+  const sector = clamp(Math.floor(save.unlocked ?? 0) || 0, 0, SECTORS.length - 1);
+  const reached = clamp(Math.max(Math.floor(save.reached ?? 1) || 1, firstLevelOf(sector), savedRun?.level ?? 1), 1, LEVEL_COUNT);
   return {
     state: 'title',
     stateT: 0,
@@ -110,11 +115,13 @@ export function createGame(save: SaveData, seed = Date.now()): Game {
     hiScore: Math.max(0, Math.floor(save.hiScore) || 0),
     lives: 3,
     nextLife: 10000,
-    unlocked,
-    menuSector: unlocked,
+    reached,
+    menuLevel: firstLevelOf(sectorOf(reached)),
+    levelScore: 0,
+    overRow: 0,
     menuRow: 0,
     difficulty,
-    savedRun: validRun(save.run),
+    savedRun,
     storySeen: !!save.storySeen,
     storyPanel: 0,
     storyThen: null,
@@ -178,8 +185,8 @@ export function drainEvents(g: Game): GameEvent[] {
   return out;
 }
 
-/** Starts a new run at the first level of a sector. */
-export function startRun(g: Game, sector: number, difficulty: Difficulty = g.difficulty): void {
+/** Starts a new run at a level already reached. */
+export function startRun(g: Game, level: number, difficulty: Difficulty = g.difficulty): void {
   g.difficulty = difficulty;
   g.run = freshStats();
   g.score = 0;
@@ -187,7 +194,21 @@ export function startRun(g: Game, sector: number, difficulty: Difficulty = g.dif
   g.nextLife = 10000;
   g.paused = false;
   emit(g, 'start');
-  loadLevel(g, firstLevelOf(clamp(sector, 0, g.unlocked)));
+  loadLevel(g, clamp(Math.round(level), 1, g.reached));
+}
+
+/**
+ * The lifesaver: after a game over, play the same level again with a full set of lives and the score
+ * Ben had when the level began.
+ */
+export function retryLevel(g: Game): void {
+  g.score = g.levelScore;
+  g.lives = DIFFICULTIES[g.difficulty].lives;
+  g.nextLife = 10000;
+  while (g.nextLife <= g.score) g.nextLife += 30000;
+  g.paused = false;
+  emit(g, 'start');
+  loadLevel(g, g.level);
 }
 
 /** Picks up a saved run where it left off. */
@@ -210,7 +231,7 @@ export function runSnapshot(g: Game): SavedRun | null {
 }
 
 /** Shows the opening story, then starts `then` (or goes back to the title). */
-export function beginStory(g: Game, then: { sector: number; difficulty: Difficulty } | null): void {
+export function beginStory(g: Game, then: { level: number; difficulty: Difficulty } | null): void {
   g.state = 'story';
   g.stateT = 0;
   g.storyPanel = 0;
@@ -222,7 +243,7 @@ function endStory(g: Game): void {
   g.storySeen = true;
   const then = g.storyThen;
   g.storyThen = null;
-  if (then) startRun(g, then.sector, then.difficulty);
+  if (then) startRun(g, then.level, then.difficulty);
   else toTitle(g);
 }
 
@@ -311,8 +332,9 @@ export function loadLevel(g: Game, level: number): void {
   g.exitToggle = 0;
   g.bossDropT = 10;
   g.player = makePlayer(g.maze.playerStart.x, g.maze.playerStart.y);
-  g.unlocked = Math.max(g.unlocked, g.spec.sector);
-  g.menuSector = g.spec.sector;
+  g.reached = Math.max(g.reached, g.level);
+  g.menuLevel = g.level;
+  g.levelScore = g.score;
   g.state = 'intro';
   g.stateT = 0;
   g.respawn = false;
@@ -328,7 +350,7 @@ export function toTitle(g: Game): void {
   g.state = 'title';
   g.stateT = 0;
   g.paused = false;
-  g.menuSector = Math.min(g.menuSector, g.unlocked);
+  g.menuLevel = clamp(g.menuLevel, 1, g.reached);
   g.menuRow = 0;
   g.robots = [];
   g.bullets = [];
@@ -422,7 +444,7 @@ export function update(g: Game, dt: number, c: Controls): void {
       }
       break;
     case 'gameover':
-      if (g.stateT > 1.5 && c.start) toTitle(g);
+      gameOverMenu(g, c);
       break;
     case 'victory':
       // The credits roll; Enter skips to the end, then returns to the title.
@@ -456,18 +478,41 @@ function titleMenu(g: Game, c: Controls): void {
       g.difficulty = DIFFICULTY_ORDER[i];
       emit(g, 'menu');
     }
-  } else if (step && row === 'sector') {
-    const s = clamp(g.menuSector + step, 0, g.unlocked);
-    if (s !== g.menuSector) {
-      g.menuSector = s;
+  } else if (step && row === 'level') {
+    const n = clamp(g.menuLevel + step, 1, g.reached);
+    if (n !== g.menuLevel) {
+      g.menuLevel = n;
       emit(g, 'menu');
     }
   }
   if (!c.start || g.stateT < 0.3) return;
   if (row === 'continue' && g.savedRun) continueRun(g, g.savedRun);
   else if (row === 'story') beginStory(g, null);
-  else if (!g.storySeen) beginStory(g, { sector: g.menuSector, difficulty: g.difficulty });
-  else startRun(g, g.menuSector, g.difficulty);
+  else if (!g.storySeen) beginStory(g, { level: g.menuLevel, difficulty: g.difficulty });
+  else startRun(g, g.menuLevel, g.difficulty);
+}
+
+/** The game over choices: the lifesaver (try this level again) or back to the title. */
+export const OVER_ROWS = ['retry', 'title'] as const;
+
+function gameOverMenu(g: Game, c: Controls): void {
+  if (g.stateT < 1.5) return;
+  const pick = c.menuRow >= 0 && c.menuRow < OVER_ROWS.length ? c.menuRow : -1;
+  if (pick >= 0 && pick !== g.overRow) {
+    g.overRow = pick;
+    emit(g, 'menu');
+  }
+  const step = (c.up || c.left ? -1 : 0) + (c.down || c.right ? 1 : 0);
+  const row = clamp(g.overRow + step, 0, OVER_ROWS.length - 1);
+  if (row !== g.overRow) {
+    g.overRow = row;
+    emit(g, 'menu');
+  }
+  if (c.back) toTitle(g);
+  else if (c.start) {
+    if (OVER_ROWS[g.overRow] === 'retry') retryLevel(g);
+    else toTitle(g);
+  }
 }
 
 function tick(g: Game, dt: number, c: Controls): void {
@@ -973,6 +1018,7 @@ function afterDeath(g: Game): void {
   if (g.lives <= 0) {
     g.state = 'gameover';
     g.stateT = 0;
+    g.overRow = 0;
     emit(g, 'gameover');
     return;
   }
@@ -1019,7 +1065,8 @@ function clearLevel(g: Game): void {
   if (g.boss) tally.push({ label: BOSS_SPECS[g.boss.kind].name + ' DESTROYED', value: 0 });
   for (const t of tally) if (t.value) addScore(g, t.value);
   g.tally = tally;
-  if (g.boss) g.unlocked = Math.max(g.unlocked, Math.min(SECTORS.length - 1, g.spec.sector + 1));
+  // Once past a level, the next one can be picked on the title too.
+  g.reached = Math.max(g.reached, Math.min(LEVEL_COUNT, g.level + 1));
   for (const b of g.bullets) if (b.enemy) burst(g, b.x, b.y, b.color, 3, 3, 0.4);
   g.bullets = [];
   g.lasers = [];
