@@ -76,6 +76,8 @@ What holds it back:
 
 ## Phase 4: sound
 
+**4.0 Make it audible ✅.** The mix played about 20 dB below normal (around −42 dBFS average), so on a tablet speaker it sounded like no sound at all. It's now brought up to about −20 dBFS average with a limiter on the peaks. On iPhone and iPad the game asks for "playback" audio so the silent switch doesn't mute it. Sound starts on the finger lifting as well as on key presses and clicks, and resumes after iOS interrupts it. While sound is off, the title says so and the speaker turns red.
+
 **4.1 Listen and tune.** A human plays 5 minutes with sound on and notes anything harsh or missing. Lower square-wave highs with a low-pass on the sfx bus; keep the compressor.
 
 **4.2 Real music.** Each sector gets its own 8-bar bass pattern and arpeggio shape, not only a different root; bosses get a 4-bar riser before the loop; a victory fanfare and a title theme. Keep it all in `audio.ts` as pattern data.
