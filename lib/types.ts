@@ -1,4 +1,4 @@
-import type { BossKind, LevelSpec, RobotKind } from './levels.ts';
+import type { BossKind, Difficulty, LevelSpec, RobotKind } from './levels.ts';
 import type { Maze, Mover, Point } from './maze.ts';
 import type { Rng } from './rng.ts';
 
@@ -16,6 +16,18 @@ export interface Controls {
   back: boolean;
   left: boolean;
   right: boolean;
+  up: boolean;
+  down: boolean;
+  /** A tap on a title-menu row (from `titleRows`), or -1. */
+  menuRow: number;
+}
+
+/** A run in progress, as saved between sittings. */
+export interface SavedRun {
+  level: number;
+  score: number;
+  lives: number;
+  difficulty: Difficulty;
 }
 
 export interface Player extends Mover {
@@ -224,6 +236,11 @@ export interface Game {
   /** Highest sector reached (0-5), so a run can start there. */
   unlocked: number;
   menuSector: number;
+  /** The title menu: which row is lit, and the difficulty picked for a new game. */
+  menuRow: number;
+  difficulty: Difficulty;
+  /** The run that CONTINUE would resume, if any. */
+  savedRun: SavedRun | null;
   player: Player;
   robots: Robot[];
   /** The next robots out of the factory. Refilled as it empties: robots never run out. */

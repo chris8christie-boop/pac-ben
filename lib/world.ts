@@ -85,6 +85,7 @@ export function makeRobot(g: Game, kind: RobotKind, x: number, y: number, dir: n
 }
 
 export function enemyBullet(g: Game, kind: BulletKind, x: number, y: number, angle: number, speed: number, color: string, walls = false): Bullet {
+  speed *= g.spec.bulletSpeed;
   const b: Bullet = {
     kind,
     x,

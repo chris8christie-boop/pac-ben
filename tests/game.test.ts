@@ -1,8 +1,8 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import { damageBoss } from '../lib/bosses.ts';
-import { createGame, drainEvents, hitPlayer, loadLevel, NO_INPUT, robotsOut, startRun, STEP, update } from '../lib/game.ts';
-import { BOSS_ORDER, LEVEL_COUNT, levelSpec } from '../lib/levels.ts';
+import { createGame, drainEvents, hitPlayer, loadLevel, NO_INPUT, robotsOut, runSnapshot, startRun, STEP, titleRows, update } from '../lib/game.ts';
+import { BOSS_ORDER, BOSS_SPECS, DIFFICULTIES, LEVEL_COUNT, levelSpec } from '../lib/levels.ts';
 import { DOWN, DX, DY, LEFT, RIGHT, UP, atCentre, canGo, tileIndex } from '../lib/maze.ts';
 import type { Controls, Game } from '../lib/types.ts';
 
@@ -11,7 +11,7 @@ const run = (g: Game, seconds: number, c: Partial<Controls> = {}) => {
 };
 
 function playing(level = 1, seed = 7): Game {
-  const g = createGame({ hiScore: 0, unlocked: 5 }, seed);
+  const g = createGame({ hiScore: 0, unlocked: 5, difficulty: 'hero' }, seed);
   startRun(g, 0);
   if (level !== 1) loadLevel(g, level);
   run(g, g.introLength + 0.05);
@@ -112,20 +112,24 @@ test('levels get harder, and every fifth is a boss', () => {
   assert.equal(new Set(BOSS_ORDER).size, 6);
 });
 
-test('the title starts a run at level 1 with three lives', () => {
+test('the title starts a run at level 1 with the difficulty\'s lives', () => {
   const g = createGame({ hiScore: 1234, unlocked: 0 }, 1);
   assert.equal(g.state, 'title');
   run(g, 0.5);
   update(g, STEP, { ...NO_INPUT, start: true });
   assert.equal(g.state, 'intro');
   assert.equal(g.level, 1);
-  assert.equal(g.lives, 3);
+  assert.equal(g.lives, DIFFICULTIES.rookie.lives);
   assert.equal(g.hiScore, 1234);
 });
 
 test('sectors already reached can be chosen on the title screen', () => {
-  const g = createGame({ hiScore: 0, unlocked: 2 }, 1);
+  const g = createGame({ hiScore: 0, unlocked: 2, difficulty: 'hero' }, 1);
   run(g, 0.5);
+  assert.deepEqual(titleRows(g), ['new', 'difficulty', 'sector']);
+  update(g, STEP, { ...NO_INPUT, down: true });
+  update(g, STEP, { ...NO_INPUT, down: true });
+  assert.equal(g.menuRow, 2);
   update(g, STEP, { ...NO_INPUT, left: true });
   update(g, STEP, { ...NO_INPUT, left: true });
   assert.equal(g.menuSector, 0);
@@ -135,6 +139,57 @@ test('sectors already reached can be chosen on the title screen', () => {
   assert.equal(g.menuSector, 2);
   update(g, STEP, { ...NO_INPUT, start: true });
   assert.equal(g.level, 11);
+});
+
+test('the difficulty picked on the title changes lives, speeds and boss health', () => {
+  const g = createGame({ hiScore: 0, unlocked: 5 }, 1);
+  assert.equal(g.difficulty, 'rookie', 'first run defaults to Rookie');
+  run(g, 0.5);
+  update(g, STEP, { ...NO_INPUT, down: true });
+  assert.equal(titleRows(g)[g.menuRow], 'difficulty');
+  update(g, STEP, { ...NO_INPUT, right: true });
+  update(g, STEP, { ...NO_INPUT, right: true });
+  update(g, STEP, { ...NO_INPUT, right: true });
+  assert.equal(g.difficulty, 'legend');
+  update(g, STEP, { ...NO_INPUT, menuRow: 1, left: true });
+  assert.equal(g.difficulty, 'hero');
+  update(g, STEP, { ...NO_INPUT, start: true });
+  assert.equal(g.lives, DIFFICULTIES.hero.lives);
+  const rookie = levelSpec(7, 'rookie');
+  const hero = levelSpec(7, 'hero');
+  const legend = levelSpec(7, 'legend');
+  assert.ok(rookie.robotSpeed < hero.robotSpeed && hero.robotSpeed < legend.robotSpeed);
+  assert.ok(rookie.overdrive > hero.overdrive);
+  assert.ok(rookie.respawn > hero.respawn);
+  assert.ok(rookie.bossHp < hero.bossHp && hero.bossHp < legend.bossHp);
+  assert.ok(rookie.bulletSpeed < hero.bulletSpeed && hero.bulletSpeed < legend.bulletSpeed);
+  for (const d of ['rookie', 'legend'] as const) {
+    const b = createGame({ hiScore: 0, unlocked: 5 }, 1);
+    startRun(b, 0, d);
+    loadLevel(b, 5);
+    assert.equal(b.boss!.maxHp, Math.round(BOSS_SPECS.boltz.hp * DIFFICULTIES[d].bossHp), `${d} boss`);
+    assert.equal(b.lives, DIFFICULTIES[d].lives);
+  }
+});
+
+test('a run can be continued from its save, and finishing clears it', () => {
+  const g = createGame({ hiScore: 0, unlocked: 5, run: { level: 7, score: 12345, lives: 2, difficulty: 'hero' } }, 1);
+  run(g, 0.5);
+  assert.deepEqual(titleRows(g), ['continue', 'new', 'difficulty', 'sector']);
+  assert.equal(g.menuRow, 0);
+  update(g, STEP, { ...NO_INPUT, start: true });
+  assert.equal(g.state, 'intro');
+  assert.equal(g.level, 7);
+  assert.equal(g.score, 12345);
+  assert.equal(g.lives, 2);
+  assert.equal(g.difficulty, 'hero');
+  assert.deepEqual(runSnapshot(g), { level: 7, score: 12345, lives: 2, difficulty: 'hero' });
+  g.state = 'gameover';
+  assert.equal(runSnapshot(g), null);
+  // A broken save is ignored.
+  const bad = createGame({ hiScore: 0, unlocked: 0, run: { level: 99, score: 1, lives: 0, difficulty: 'hero' } }, 1);
+  assert.equal(bad.savedRun, null);
+  assert.deepEqual(titleRows(bad), ['new', 'difficulty']);
 });
 
 test('Ben moves along corridors, turns at junctions and eats dots', () => {
@@ -302,7 +357,7 @@ test('pausing freezes the game', () => {
 });
 
 test('a careful bot can clear every level, bosses included, without errors', () => {
-  const g = createGame({ hiScore: 0, unlocked: 5 }, 99);
+  const g = createGame({ hiScore: 0, unlocked: 5, difficulty: 'hero' }, 99);
   startRun(g, 0);
   const cleared: number[] = [];
   let level = 1;

@@ -3,11 +3,11 @@
  * the 28 x 31 maze, and two rows for lives and power-ups at the bottom.
  * Everything is drawn in tile units; the canvas transform scales it to fit.
  */
-import { BOSS_SPECS, LEVEL_COUNT, ROBOT_SPECS, SECTORS, levelSpec } from './levels.ts';
+import { BOSS_SPECS, CREDITS, DIFFICULTIES, DIFFICULTY_ORDER, LEVEL_COUNT, ROBOT_SPECS, SECTORS, levelSpec } from './levels.ts';
 import type { RobotKind } from './levels.ts';
 import { COLS, DX, DY, PATH, ROWS, tileAt } from './maze.ts';
 import { insetContour, wallContours } from './contours.ts';
-import { POWER_LABELS, laserOrigin, waitingRobots } from './game.ts';
+import { POWER_LABELS, laserOrigin, titleRows, waitingRobots } from './game.ts';
 import { cloakAmount } from './robots.ts';
 import type { Boss, Bullet, Game, Laser, Pickup, PowerKind, Robot } from './types.ts';
 
@@ -49,8 +49,6 @@ export interface Layout {
 export const UI = {
   resume: { x: 7, y: 16.6, w: 14, h: 2.4 },
   quit: { x: 7, y: 19.8, w: 14, h: 2.4 },
-  sectorLeft: { x: 1, y: 26.4, w: 6, h: 2.6 },
-  sectorRight: { x: 21, y: 26.4, w: 6, h: 2.6 },
 };
 
 export function computeLayout(cssW: number, cssH: number, dpr: number, touch: boolean): Layout {
@@ -2021,28 +2019,70 @@ function drawTitle(view: View, g: Game): void {
     }
   }
 
-  const blink = Math.floor(t * 2.2) % 2 === 0;
-  const prompt = view.layout.touch ? 'TAP TO START' : view.focused ? 'PRESS ENTER TO START' : 'CLICK HERE TO START';
-  if (blink) text(view, prompt, 14, 24.4, 0.75, '#ffffff', { weight: 900, glow: '#ffd23f' });
-
-  if (g.unlocked > 0) {
-    const sector = SECTORS[g.menuSector];
-    const cy = UI.sectorLeft.y + UI.sectorLeft.h / 2;
-    text(view, `START AT SECTOR ${g.menuSector + 1}`, 14, cy - 0.4, 0.42, '#8a93b8');
-    text(view, `${sector.name}`, 14, cy + 0.45, 0.62, sector.wall, { weight: 900 });
-    if (g.menuSector > 0) text(view, '◀', 4, cy, 1, '#ffffff', { weight: 900 });
-    if (g.menuSector < g.unlocked) text(view, '▶', 24, cy, 1, '#ffffff', { weight: 900 });
-  } else {
-    text(view, '30 LEVELS  ·  6 SECTORS  ·  6 BOSSES', 14, 27.7, 0.48, '#8a93b8', { weight: 700 });
+  // The menu.
+  const rows = titleRows(g);
+  if (!view.layout.touch && !view.focused && Math.floor(t * 2.2) % 2 === 0) {
+    text(view, 'CLICK HERE TO PLAY', 14, 22.6, 0.6, '#ffffff', { weight: 900, glow: '#ffd23f' });
   }
+  rows.forEach((row, i) => {
+    const r = titleRowRect(g, i);
+    const lit = i === g.menuRow;
+    const cy = r.y + r.h / 2;
+    if (lit) {
+      ctx.fillStyle = 'rgba(255,210,63,0.1)';
+      roundRect(ctx, r.x, r.y, r.w, r.h, 0.5);
+      ctx.fill();
+      ctx.strokeStyle = rgba('#ffd23f', 0.6 + Math.sin(t * 6) * 0.3);
+      ctx.lineWidth = 0.07;
+      ctx.stroke();
+    }
+    const ink = lit ? '#ffffff' : '#9aa3c7';
+    const arrows = (canLeft: boolean, canRight: boolean) => {
+      if (canLeft) text(view, '◀', r.x + 1, cy, 0.7, lit ? '#ffd23f' : '#5a6388', { weight: 900 });
+      if (canRight) text(view, '▶', r.x + r.w - 1, cy, 0.7, lit ? '#ffd23f' : '#5a6388', { weight: 900 });
+    };
+    switch (row) {
+      case 'continue': {
+        const run = g.savedRun!;
+        text(view, `CONTINUE  ·  LEVEL ${run.level}  ·  ${DIFFICULTIES[run.difficulty].name}`, 14, cy, 0.6, lit ? '#7dff8a' : ink, { weight: 900, glow: lit ? '#7dff8a' : undefined, maxWidth: r.w - 1 });
+        break;
+      }
+      case 'new':
+        text(view, 'NEW GAME', 14, cy, 0.66, lit ? '#ffd23f' : ink, { weight: 900, glow: lit ? '#ffb000' : undefined });
+        break;
+      case 'difficulty': {
+        const d = DIFFICULTIES[g.difficulty];
+        const i0 = DIFFICULTY_ORDER.indexOf(g.difficulty);
+        text(view, 'DIFFICULTY', r.x + 2.1, cy, 0.42, ink, { align: 'left', weight: 700 });
+        text(view, d.name, r.x + r.w - 2.1, cy - (lit ? 0.22 : 0), 0.62, d.color, { align: 'right', weight: 900, glow: lit ? d.color : undefined });
+        if (lit) text(view, d.blurb.toUpperCase(), r.x + r.w - 2.1, cy + 0.42, 0.3, '#c8cfe8', { align: 'right', maxWidth: r.w - 8 });
+        arrows(i0 > 0, i0 < DIFFICULTY_ORDER.length - 1);
+        break;
+      }
+      case 'sector': {
+        const sector = SECTORS[g.menuSector];
+        text(view, 'START AT', r.x + 2.1, cy, 0.42, ink, { align: 'left', weight: 700 });
+        text(view, `SECTOR ${g.menuSector + 1}: ${sector.name}`, r.x + r.w - 2.1, cy, 0.5, lit ? sector.wall : ink, { align: 'right', weight: 900, maxWidth: r.w - 8 });
+        arrows(g.menuSector > 0, g.menuSector < g.unlocked);
+        break;
+      }
+    }
+  });
 
   const hints = view.layout.touch
-    ? ['LEFT THUMB: SWIPE OR DRAG TO STEER', 'RIGHT THUMB: HOLD FIRE TO SHOOT']
-    : ['HOLD THE ARROW KEYS TO MOVE  ·  SPACE: FIRE', 'P: PAUSE  ·  M: SOUND ON/OFF'];
-  text(view, hints[0], 14, 30.3, 0.42, '#c8cfe8');
-  text(view, hints[1], 14, 31.4, 0.42, '#c8cfe8');
-  text(view, 'EAT EVERY DOT TO CLEAR A LEVEL', 14, 32.9, 0.4, '#ffd23f', { weight: 800, maxWidth: 25 });
-  text(view, 'POWER CORES SEND THE ROBOTS RUNNING', 14, 34, 0.36, '#8a93b8', { maxWidth: 25 });
+    ? ['TAP A ROW TO CHOOSE  ·  TAP AGAIN TO START', 'LEFT THUMB STEERS  ·  RIGHT THUMB FIRES']
+    : ['↑ ↓ CHOOSE  ·  ◀ ▶ CHANGE  ·  ENTER: START', 'HOLD THE ARROWS TO MOVE  ·  SPACE: FIRE  ·  P: PAUSE  ·  M: SOUND'];
+  text(view, hints[0], 14, 30.4, 0.4, '#c8cfe8', { maxWidth: 26 });
+  text(view, hints[1], 14, 31.4, 0.38, '#8a93b8', { maxWidth: 26 });
+  text(view, 'EAT EVERY DOT TO CLEAR A LEVEL  ·  POWER CORES SEND THE ROBOTS RUNNING', 14, 32.7, 0.36, '#ffd23f', { weight: 800, maxWidth: 26 });
+  text(view, CREDITS, 14, 34.6, 0.42, '#ffd23f', { weight: 900, glow: '#ff9d00', alpha: 0.85 });
+}
+
+/** Where row `i` of the title menu sits, in tiles. */
+export function titleRowRect(g: Game, i: number): Rect {
+  const rows = titleRows(g);
+  const top = 23.3 + (4 - rows.length) * 0.45;
+  return { x: 4, y: top + i * 1.55, w: 20, h: 1.4 };
 }
 
 function drawControls(view: View): void {

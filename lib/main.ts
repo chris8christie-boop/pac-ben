@@ -3,11 +3,12 @@
  * sound and saved progress. Returns a function that removes it all again.
  */
 import { createSound } from './audio.ts';
-import { createGame, drainEvents, loadLevel, startRun, STEP, update } from './game.ts';
+import { createGame, drainEvents, loadLevel, runSnapshot, startRun, STEP, titleRows, update } from './game.ts';
 import { createInput } from './input.ts';
-import { GH, GW, UI, computeLayout, render } from './render.ts';
+import { GH, GW, UI, computeLayout, render, titleRowRect } from './render.ts';
 import type { Layout, View } from './render.ts';
-import type { Controls, Game } from './types.ts';
+import type { Difficulty } from './levels.ts';
+import type { Controls, Game, SavedRun } from './types.ts';
 
 export interface PacBenOptions {
   /** CSS font-family list for all text. */
@@ -32,6 +33,8 @@ interface Saved {
   hiScore: number;
   unlocked: number;
   muted: boolean;
+  difficulty?: Difficulty;
+  run?: SavedRun | null;
 }
 
 function load(): Saved {
@@ -39,12 +42,12 @@ function load(): Saved {
     const raw = window.localStorage.getItem(SAVE_KEY);
     if (raw) {
       const s = JSON.parse(raw) as Partial<Saved>;
-      return { hiScore: Number(s.hiScore) || 0, unlocked: Number(s.unlocked) || 0, muted: !!s.muted };
+      return { hiScore: Number(s.hiScore) || 0, unlocked: Number(s.unlocked) || 0, muted: !!s.muted, difficulty: s.difficulty, run: s.run ?? null };
     }
   } catch {
     // Private windows and blocked storage: play without saving.
   }
-  return { hiScore: 0, unlocked: 0, muted: false };
+  return { hiScore: 0, unlocked: 0, muted: false, run: null };
 }
 
 function store(s: Saved): void {
@@ -90,7 +93,7 @@ export function startPacBen(host: HTMLElement, options: PacBenOptions = {}): () 
   const ctx = canvas.getContext('2d', { alpha: false })!;
 
   const saved = load();
-  const g = createGame({ hiScore: saved.hiScore, unlocked: saved.unlocked });
+  const g = createGame({ hiScore: saved.hiScore, unlocked: saved.unlocked, difficulty: saved.difficulty, run: saved.run });
   const sound = createSound(saved.muted);
   const resume = options.resume;
   if (resume && resume.level >= 1 && resume.lives > 0) {
@@ -129,9 +132,16 @@ export function startPacBen(host: HTMLElement, options: PacBenOptions = {}): () 
     for (const w of [600, 700, 800, 900]) void document.fonts.load(`${w} 20px ${font}`).catch(() => undefined);
   }
 
-  const pending: Controls = { dir: -1, fire: false, start: false, pause: false, back: false, left: false, right: false };
+  const pending: Controls = { dir: -1, fire: false, start: false, pause: false, back: false, left: false, right: false, up: false, down: false, menuRow: -1 };
   let wasTouch = input.touchSeen();
-  let lastSaved = { hi: saved.hiScore, unlocked: saved.unlocked, muted: saved.muted };
+  let lastRunKey = '';
+
+  function save(): void {
+    const run = runSnapshot(g) ?? g.savedRun;
+    lastRunKey = run ? `${run.level}/${run.lives}` : '';
+    store({ hiScore: g.hiScore, unlocked: g.unlocked, muted: sound.isMuted(), difficulty: g.difficulty, run });
+  }
+  let lastSaved = { hi: g.hiScore, unlocked: g.unlocked, muted: saved.muted, difficulty: g.difficulty };
 
   function handleTaps(): void {
     for (const tap of input.taps()) {
@@ -152,11 +162,23 @@ export function startPacBen(host: HTMLElement, options: PacBenOptions = {}): () 
         continue;
       }
       switch (g.state) {
-        case 'title':
-          if (g.unlocked > 0 && inRect(gx, gy, UI.sectorLeft)) pending.left = true;
-          else if (g.unlocked > 0 && inRect(gx, gy, UI.sectorRight)) pending.right = true;
-          else if (insideGame || layout.touch) pending.start = true;
+        case 'title': {
+          // Tap a row to light it; the left or right third of a picker row changes it, the middle (or
+          // a button row) confirms it. Tapping anywhere else starts the game.
+          const rows = titleRows(g);
+          let hit = -1;
+          for (let i = 0; i < rows.length; i++) if (inRect(gx, gy, titleRowRect(g, i))) hit = i;
+          if (hit < 0) {
+            if (insideGame || layout.touch) pending.start = true;
+            break;
+          }
+          pending.menuRow = hit;
+          const picker = rows[hit] === 'difficulty' || rows[hit] === 'sector';
+          if (picker && gx < GW / 3) pending.left = true;
+          else if (picker && gx > (GW * 2) / 3) pending.right = true;
+          else if (hit === g.menuRow || !picker) pending.start = true;
           break;
+        }
         case 'clear':
         case 'gameover':
         case 'victory':
@@ -195,11 +217,14 @@ export function startPacBen(host: HTMLElement, options: PacBenOptions = {}): () 
     pending.back ||= c.back;
     pending.left ||= c.left;
     pending.right ||= c.right;
+    pending.up ||= c.up;
+    pending.down ||= c.down;
     handleTaps();
 
     while (acc >= STEP) {
       const step: Controls = { ...pending, dir: c.dir, fire: c.fire };
-      pending.start = pending.pause = pending.back = pending.left = pending.right = false;
+      pending.start = pending.pause = pending.back = pending.left = pending.right = pending.up = pending.down = false;
+      pending.menuRow = -1;
       update(g, STEP, step);
       acc -= STEP;
     }
@@ -212,19 +237,23 @@ export function startPacBen(host: HTMLElement, options: PacBenOptions = {}): () 
     view.muted = sound.isMuted();
     render(view, g);
 
-    if (g.hiScore !== lastSaved.hi || g.unlocked !== lastSaved.unlocked || view.muted !== lastSaved.muted) {
-      if (g.state !== 'play' || g.hiScore - lastSaved.hi > 5000 || g.unlocked !== lastSaved.unlocked || view.muted !== lastSaved.muted) {
-        lastSaved = { hi: g.hiScore, unlocked: g.unlocked, muted: view.muted };
-        store({ hiScore: g.hiScore, unlocked: g.unlocked, muted: view.muted });
+    // Save when something lasting changes: the run reaching a new level or losing a life, a record,
+    // a new sector, the difficulty or the sound setting. Score alone is saved when the page is hidden.
+    const run = runSnapshot(g);
+    const runKey = run ? `${run.level}/${run.lives}` : g.state === 'gameover' || g.state === 'victory' ? '' : lastRunKey;
+    if (runKey !== lastRunKey && (g.state !== 'play' || run)) {
+      if (!run && (g.state === 'gameover' || g.state === 'victory')) g.savedRun = null;
+      save();
+    }
+    if (g.hiScore !== lastSaved.hi || g.unlocked !== lastSaved.unlocked || view.muted !== lastSaved.muted || g.difficulty !== lastSaved.difficulty) {
+      if (g.state !== 'play' || g.hiScore - lastSaved.hi > 5000 || g.unlocked !== lastSaved.unlocked || view.muted !== lastSaved.muted || g.difficulty !== lastSaved.difficulty) {
+        lastSaved = { hi: g.hiScore, unlocked: g.unlocked, muted: view.muted, difficulty: g.difficulty };
+        save();
       }
     }
   }
   raf = requestAnimationFrame(frame);
 
-  function save(): void {
-    lastSaved = { hi: g.hiScore, unlocked: g.unlocked, muted: sound.isMuted() };
-    store({ hiScore: g.hiScore, unlocked: g.unlocked, muted: sound.isMuted() });
-  }
   function onVisibility(): void {
     if (document.hidden) {
       if (g.state === 'play' || g.state === 'intro') g.paused = true;
@@ -256,7 +285,7 @@ export function startPacBen(host: HTMLElement, options: PacBenOptions = {}): () 
     window.removeEventListener('blur', onBlur);
     window.removeEventListener('focus', onFocus);
     window.removeEventListener('pagehide', save);
-    store({ hiScore: g.hiScore, unlocked: g.unlocked, muted: sound.isMuted() });
+    save();
     input.dispose();
     sound.dispose();
     canvas.remove();

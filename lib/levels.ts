@@ -6,6 +6,31 @@
 export const LEVEL_COUNT = 30;
 export const LEVELS_PER_SECTOR = 5;
 
+/** Shown in the ending credits and on the title screen. */
+export const CREDITS = 'MADE FOR BEN BY DAD';
+
+export type Difficulty = 'rookie' | 'hero' | 'legend';
+
+export interface DifficultySpec {
+  name: string;
+  blurb: string;
+  color: string;
+  lives: number;
+  robotSpeed: number;
+  overdrive: number;
+  respawn: number;
+  bossHp: number;
+  bulletSpeed: number;
+}
+
+export const DIFFICULTIES: Record<Difficulty, DifficultySpec> = {
+  rookie: { name: 'ROOKIE', blurb: 'Slower robots, five lives', color: '#7dff8a', lives: 5, robotSpeed: 0.8, overdrive: 1.5, respawn: 1.5, bossHp: 0.7, bulletSpeed: 0.85 },
+  hero: { name: 'HERO', blurb: 'The game as designed', color: '#ffd23f', lives: 3, robotSpeed: 1, overdrive: 1, respawn: 1, bossHp: 1, bulletSpeed: 1 },
+  legend: { name: 'LEGEND', blurb: 'Faster robots, two lives, tougher bosses', color: '#ff3b5c', lives: 2, robotSpeed: 1.15, overdrive: 1, respawn: 1, bossHp: 1.3, bulletSpeed: 1.2 },
+};
+
+export const DIFFICULTY_ORDER: readonly Difficulty[] = ['rookie', 'hero', 'legend'];
+
 export type RobotKind =
   | 'chaser'
   | 'ambusher'
@@ -99,7 +124,11 @@ export const SECTORS: readonly Sector[] = [
 export interface LevelSpec {
   level: number;
   sector: number;
+  difficulty: Difficulty;
   boss: BossKind | null;
+  /** Boss health and enemy shot speed, as multipliers from the difficulty. */
+  bossHp: number;
+  bulletSpeed: number;
   /** Robots out on the maze at once. Destroyed ones are rebuilt, as Pac-Man's ghosts return. */
   maxActive: number;
   spawnEvery: number;
@@ -153,22 +182,26 @@ function mixFor(level: number): [RobotKind, number][] {
   return mix;
 }
 
-export function levelSpec(level: number): LevelSpec {
+export function levelSpec(level: number, difficulty: Difficulty = 'hero'): LevelSpec {
   const L = Math.max(1, Math.min(LEVEL_COUNT, Math.round(level)));
   const sector = sectorOf(L);
+  const diff = DIFFICULTIES[difficulty];
   const bossLevel = L % LEVELS_PER_SECTOR === 0;
   const step = L - 1;
   const fresh = UNLOCKS.find(([from, kind]) => from === L && kind !== 'chaser' && kind !== 'ambusher' && kind !== 'wanderer');
   return {
     level: L,
     sector,
+    difficulty,
     boss: bossLevel ? BOSS_ORDER[sector] : null,
+    bossHp: diff.bossHp,
+    bulletSpeed: diff.bulletSpeed,
     maxActive: Math.min(4 + Math.floor(step / 4), 8),
     spawnEvery: Math.max(3.2 - step * 0.07, 1.2),
-    respawn: Math.max(6 - step * 0.12, 2.5),
-    robotSpeed: 4.3 + step * 0.115,
+    respawn: Math.max(6 - step * 0.12, 2.5) * diff.respawn,
+    robotSpeed: (4.3 + step * 0.115) * diff.robotSpeed,
     playerSpeed: 7 + step * 0.04,
-    overdrive: Math.max(7 - step * 0.17, 2.5),
+    overdrive: Math.max(7 - step * 0.17, 2.5) * diff.overdrive,
     mix: mixFor(L),
     newKind: fresh ? fresh[1] : null,
     portals: sector >= 2,

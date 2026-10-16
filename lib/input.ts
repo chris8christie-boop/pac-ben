@@ -40,7 +40,7 @@ const FIRE_KEYS = new Set(['Space', 'KeyJ', 'KeyK', 'KeyZ', 'KeyX', 'ControlLeft
 export function createInput(canvas: HTMLCanvasElement, layout: () => Layout, onGesture: () => void): Input {
   const held: number[] = [];
   const fireKeys = new Set<string>();
-  const edges = { start: false, pause: false, back: false, left: false, right: false };
+  const edges = { start: false, pause: false, back: false, left: false, right: false, up: false, down: false };
   let mute = false;
   let tapList: Tap[] = [];
   let touched = false;
@@ -63,6 +63,8 @@ export function createInput(canvas: HTMLCanvasElement, layout: () => Layout, onG
       if (!e.repeat) {
         if (d === 3) edges.left = true;
         if (d === 1) edges.right = true;
+        if (d === 0) edges.up = true;
+        if (d === 2) edges.down = true;
       }
       e.preventDefault();
     }
@@ -202,6 +204,8 @@ export function createInput(canvas: HTMLCanvasElement, layout: () => Layout, onG
       if (pressed(1) || pressed(8)) edges.back = true;
       if (pressed(14)) edges.left = true;
       if (pressed(15)) edges.right = true;
+      if (pressed(12)) edges.up = true;
+      if (pressed(13)) edges.down = true;
       padPrev = now;
       if (dir >= 0 || fire) onGesture();
       break;
@@ -217,8 +221,8 @@ export function createInput(canvas: HTMLCanvasElement, layout: () => Layout, onG
       if (dir < 0 && swipeDir >= 0) dir = swipeDir;
       if (dir < 0) dir = pad.dir;
       swipeDir = -1;
-      const c: Controls = { dir, fire: fireKeys.size > 0 || fireIds.size > 0 || pad.fire, ...edges };
-      edges.start = edges.pause = edges.back = edges.left = edges.right = false;
+      const c: Controls = { dir, fire: fireKeys.size > 0 || fireIds.size > 0 || pad.fire, ...edges, menuRow: -1 };
+      edges.start = edges.pause = edges.back = edges.left = edges.right = edges.up = edges.down = false;
       return c;
     },
     taps() {
